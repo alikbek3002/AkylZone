@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowRight, ArrowLeft, CheckCircle2, XCircle, Maximize, AlertTriangle, Shield } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle2, XCircle, Maximize, AlertTriangle, Shield, LogOut } from 'lucide-react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import {
@@ -36,6 +36,7 @@ export default function TestPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [tabSwitchWarning, setTabSwitchWarning] = useState(false);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const enterFullscreen = useCallback(async () => {
     try {
@@ -67,12 +68,8 @@ export default function TestPage() {
   const testType = testData.test_info.type;
   const isTrial = testType === 'TRIAL';
 
-  // ——— TRIAL ONLY: Full anti-cheat ———
+  // ——— Anti-cheat for ALL tests (desktop + mobile) ———
   useEffect(() => {
-    if (!isTrial) return;
-
-    enterFullscreen();
-
     const preventEvent = (e: Event) => { e.preventDefault(); };
 
     const preventShortcuts = (e: KeyboardEvent) => {
@@ -87,12 +84,12 @@ export default function TestPage() {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase())) {
         e.preventDefault();
       }
-      if (e.key === 'Escape') e.preventDefault();
       if (e.metaKey && e.shiftKey && ['3', '4', '5'].includes(e.key)) {
         e.preventDefault();
         navigator.clipboard?.writeText('').catch(() => {});
       }
       if (e.altKey && e.key === 'Tab') e.preventDefault();
+      if (isTrial && e.key === 'Escape') e.preventDefault();
     };
 
     const handleVisibilityChange = () => {
@@ -107,16 +104,19 @@ export default function TestPage() {
       setTabSwitchWarning(true);
     };
 
-    const handlePopState = () => {
-      window.history.pushState({ guard: true }, document.title, window.location.href);
+    // Mobile: block long-press context menu via touch
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    const handleTouchStart = (e: TouchEvent) => {
+      longPressTimer = setTimeout(() => {
+        e.preventDefault();
+      }, 300);
     };
-
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
+    const handleTouchEnd = () => {
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     };
-
-    window.history.pushState({ guard: true }, document.title, window.location.href);
+    const handleTouchMove = () => {
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    };
 
     document.addEventListener('copy', preventEvent);
     document.addEventListener('cut', preventEvent);
@@ -127,8 +127,32 @@ export default function TestPage() {
     document.addEventListener('keydown', preventShortcuts);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
-    window.addEventListener('popstate', handlePopState);
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd);
+    document.addEventListener('touchmove', handleTouchMove);
+
+    // TRIAL only: block back navigation + page close
+    let cleanupTrial: (() => void) | null = null;
+    if (isTrial) {
+      enterFullscreen();
+
+      const handlePopState = () => {
+        window.history.pushState({ guard: true }, document.title, window.location.href);
+      };
+      const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+        e.preventDefault();
+        e.returnValue = '';
+      };
+
+      window.history.pushState({ guard: true }, document.title, window.location.href);
+      window.addEventListener('popstate', handlePopState);
+      window.addEventListener('beforeunload', handleBeforeUnload);
+
+      cleanupTrial = () => {
+        window.removeEventListener('popstate', handlePopState);
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+      };
+    }
 
     return () => {
       document.removeEventListener('copy', preventEvent);
@@ -140,8 +164,10 @@ export default function TestPage() {
       document.removeEventListener('keydown', preventShortcuts);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
-      window.removeEventListener('popstate', handlePopState);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('touchmove', handleTouchMove);
+      cleanupTrial?.();
     };
   }, [isTrial, enterFullscreen]);
 
@@ -274,7 +300,7 @@ export default function TestPage() {
             <p>
               {localizeUi(student?.language, 'Отвечено', 'Жооп берилди')}: <span className="font-bold text-slate-900">{submitResult.answered}</span> / {submitResult.total}
             </p>
-            {isTrial && tabSwitchCount > 0 && (
+            {tabSwitchCount > 0 && (
               <p className="text-amber-600 font-medium">
                 {localizeUi(student?.language, `Переключений вкладки: ${tabSwitchCount}`, `Башка вкладкага өтүү: ${tabSwitchCount}`)}
               </p>
@@ -297,10 +323,46 @@ export default function TestPage() {
     <div
       ref={containerRef}
       className={`fixed inset-0 z-[9999] overflow-auto bg-white font-sans text-stone-900 ${isTrial ? 'bg-slate-50' : ''}`}
-      style={isTrial ? { WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' } : undefined}
+      style={{
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+        WebkitTouchCallout: 'none',
+        touchAction: 'manipulation',
+      } as React.CSSProperties}
     >
-      {/* TRIAL: Tab switch warning */}
-      {isTrial && tabSwitchWarning && (
+      {/* Exit confirmation for MAIN test */}
+      {showExitConfirm && !isTrial && (
+        <div className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="mx-4 max-w-sm rounded-3xl bg-white p-6 sm:p-8 text-center shadow-2xl">
+            <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+              <LogOut className="h-7 w-7" />
+            </div>
+            <h3 className="mt-4 text-lg font-bold text-slate-900">
+              {localizeUi(student?.language, 'Выйти из теста?', 'Тесттен чыгасызбы?')}
+            </h3>
+            <p className="mt-2 text-sm text-slate-500">
+              {localizeUi(student?.language, 'Прогресс не будет сохранён.', 'Жүрүш сакталбайт.')}
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setShowExitConfirm(false)}
+                className="flex-1 h-11 rounded-xl border-2 border-stone-200 text-sm font-bold text-stone-700 hover:bg-stone-50 transition-colors"
+              >
+                {localizeUi(student?.language, 'Остаться', 'Калуу')}
+              </button>
+              <button
+                onClick={handleExitTest}
+                className="flex-1 h-11 rounded-xl bg-rose-600 text-sm font-bold text-white hover:bg-rose-700 transition-colors"
+              >
+                {localizeUi(student?.language, 'Выйти', 'Чыгуу')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab switch warning */}
+      {tabSwitchWarning && (
         <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="mx-4 max-w-md rounded-3xl bg-white p-8 text-center shadow-2xl">
             <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-600">
@@ -320,7 +382,7 @@ export default function TestPage() {
               {localizeUi(student?.language, `Переключений: ${tabSwitchCount}`, `Өтүүлөр: ${tabSwitchCount}`)}
             </p>
             <button
-              onClick={() => { setTabSwitchWarning(false); enterFullscreen(); }}
+              onClick={() => { setTabSwitchWarning(false); if (isTrial) enterFullscreen(); }}
               className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-medium text-white hover:bg-slate-800 transition-colors"
             >
               {localizeUi(student?.language, 'Продолжить тест', 'Тестти улантуу')}
@@ -367,7 +429,7 @@ export default function TestPage() {
             </div>
           ) : (
             <button
-              onClick={handleExitTest}
+              onClick={() => setShowExitConfirm(true)}
               className="flex items-center gap-1.5 text-xs sm:text-sm font-medium text-stone-400 hover:text-stone-900 transition-colors"
             >
               <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -376,7 +438,7 @@ export default function TestPage() {
           )}
 
           <div className="flex items-center gap-2 sm:gap-3">
-            {isTrial && tabSwitchCount > 0 && (
+            {tabSwitchCount > 0 && (
               <span className="rounded-full bg-amber-50 border border-amber-200 px-2.5 py-1 text-[10px] sm:text-xs font-bold text-amber-700">
                 {tabSwitchCount}
               </span>
