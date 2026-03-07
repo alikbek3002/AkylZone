@@ -42,11 +42,31 @@ ALTER TABLE questions_kyrgyz_kg_7 ADD COLUMN IF NOT EXISTS image_url TEXT DEFAUL
 INSERT INTO storage.buckets (id, name, public) VALUES ('question-images', 'question-images', true) ON CONFLICT (id) DO NOTHING;
 
 -- Allow public read access to the bucket
-CREATE POLICY IF NOT EXISTS "Public read access for question images"
-  ON storage.objects FOR SELECT
-  USING (bucket_id = 'question-images');
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'storage' 
+    AND tablename = 'objects' 
+    AND policyname = 'Public read access for question images'
+  ) THEN
+    CREATE POLICY "Public read access for question images"
+      ON storage.objects FOR SELECT
+      USING (bucket_id = 'question-images');
+  END IF;
+END $$;
 
 -- Allow authenticated uploads (via service role key)
-CREATE POLICY IF NOT EXISTS "Service role upload access for question images"
-  ON storage.objects FOR INSERT
-  WITH CHECK (bucket_id = 'question-images');
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'storage' 
+    AND tablename = 'objects' 
+    AND policyname = 'Service role upload access for question images'
+  ) THEN
+    CREATE POLICY "Service role upload access for question images"
+      ON storage.objects FOR INSERT
+      WITH CHECK (bucket_id = 'question-images');
+  END IF;
+END $$;
