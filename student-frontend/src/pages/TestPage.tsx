@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, LockKeyhole, Play, Sparkles, XCircle } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -28,6 +28,14 @@ function getProgressLabel(answered: number, total: number, language: 'ru' | 'kg'
 
 type RevealState = Record<string, AnswerQuestionResponse>;
 
+function getMainWindowLabel(grade: number | undefined) {
+  if (grade === 7) {
+    return '6-7 тест';
+  }
+
+  return '5-6 тест';
+}
+
 export default function TestPage() {
   const { id: rawTestType } = useParams();
   const testType = normalizeTestType(rawTestType);
@@ -43,6 +51,7 @@ export default function TestPage() {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [revealedAnswers, setRevealedAnswers] = useState<RevealState>({});
   const [submitResult, setSubmitResult] = useState<SubmitTestResponse | null>(null);
+  const [selectedMainSubject, setSelectedMainSubject] = useState<string | null>(null);
 
   const [isGenerating, setIsGenerating] = useState<string | number | null>(null);
   const [isAnswering, setIsAnswering] = useState(false);
@@ -62,6 +71,7 @@ export default function TestPage() {
     const loadTree = async () => {
       setLoading(true);
       setApiError(null);
+      setSelectedMainSubject(null);
 
       try {
         const data = await fetchAvailableTests(token);
@@ -82,6 +92,7 @@ export default function TestPage() {
   const currentReveal = currentQuestion ? revealedAnswers[currentQuestion.id] : undefined;
   const currentSelectedIndex = currentQuestion ? selectedAnswers[currentQuestion.id] : undefined;
   const answeredCount = Object.keys(revealedAnswers).length;
+  const mainWindowLabel = getMainWindowLabel(availableData?.branch.grade ?? student?.grade);
 
   const handleStartMain = async (subjectId: string) => {
     if (!token || testType !== 'MAIN') {
@@ -279,84 +290,170 @@ export default function TestPage() {
           )}
 
           {testType === 'MAIN' && activeNode && 'items' in activeNode && (
-            <div className="grid gap-5">
-              {activeNode.items.map((item) => {
-                const isReady = item.status === 'ready';
-                const isBusy = isGenerating === item.id;
+            <div className="space-y-5">
+              <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_55px_-30px_rgba(15,23,42,0.28)]">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h2 className="text-2xl font-semibold text-slate-950">
+                        {localizeUi(student?.language, 'Выбор предмета', 'Предмет тандоо')}
+                      </h2>
+                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
+                        {localizeUi(student?.language, 'Предметный маршрут', 'Предметтик маршрут')}
+                      </span>
+                    </div>
+                    <p className="max-w-2xl text-sm leading-6 text-slate-600">
+                      {localizeUi(
+                        student?.language,
+                        'Сначала выберите предмет. Под выбранным предметом откроется тестовое окно 5-6 или 6-7 в зависимости от вашего класса.',
+                        'Адегенде предметти тандаңыз. Тандалган предметтин алдында сиздин классыңызга жараша 5-6 же 6-7 тест терезеси ачылат.',
+                      )}
+                    </p>
+                  </div>
 
-                return (
-                  <article
-                    key={item.id}
-                    className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_55px_-30px_rgba(15,23,42,0.28)]"
-                  >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="space-y-4">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <h2 className="text-2xl font-semibold text-slate-950">{item.title}</h2>
-                          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
-                            isReady ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                          }`}>
-                            {isReady ? <CheckCircle2 className="h-3.5 w-3.5" /> : <LockKeyhole className="h-3.5 w-3.5" />}
-                            {isReady
-                              ? localizeUi(student?.language, 'Ветка готова', 'Бутак даяр')
-                              : localizeUi(student?.language, 'Пока недоступно', 'Азырынча жеткиликсиз')}
-                          </span>
+                  <div className="w-full max-w-sm rounded-[24px] border border-slate-200 bg-slate-50/90 p-4 lg:w-80">
+                    <div className="text-sm text-slate-600">
+                      {localizeUi(
+                        student?.language,
+                        'После выбора предмета конкретный тест соберется по предмету и вашей ветке класса.',
+                        'Предмет тандалгандан кийин тест предмет жана класстык бутагыңыз боюнча түзүлөт.',
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <div className="grid gap-5">
+                {activeNode.items.map((item) => {
+                  const isReady = item.status === 'ready';
+                  const isBusy = isGenerating === item.id;
+                  const isSelected = selectedMainSubject === item.id;
+
+                  return (
+                    <article
+                      key={item.id}
+                      className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_55px_-30px_rgba(15,23,42,0.28)]"
+                    >
+                      <div className="space-y-5">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="space-y-4">
+                            <div className="flex flex-wrap items-center gap-3">
+                              <h2 className="text-2xl font-semibold text-slate-950">{item.title}</h2>
+                              <span
+                                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+                                  isReady ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                                }`}
+                              >
+                                {isReady ? <CheckCircle2 className="h-3.5 w-3.5" /> : <LockKeyhole className="h-3.5 w-3.5" />}
+                                {isReady
+                                  ? localizeUi(student?.language, 'Ветка готова', 'Бутак даяр')
+                                  : localizeUi(student?.language, 'Пока недоступно', 'Азырынча жеткиликсиз')}
+                              </span>
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-2">
+                              {item.lines.map((line) => (
+                                <div
+                                  key={line.grade}
+                                  className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700"
+                                >
+                                  <div className="font-medium text-slate-900">{line.label}</div>
+                                  <div className="mt-1 text-slate-500">
+                                    {localizeUi(student?.language, 'Сейчас', 'Азыр')} {line.available} / {line.required}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="w-full max-w-sm rounded-[24px] border border-slate-200 bg-slate-50/90 p-4 lg:w-80">
+                            <div className="text-sm text-slate-600">
+                              {localizeUi(student?.language, 'Нужно 125 + 125, сейчас', '125 + 125 керек, азыр')}{' '}
+                              <span className="font-semibold text-slate-950">
+                                {item.lines.map((line) => line.available).join(' + ')}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => setSelectedMainSubject((previous) => (previous === item.id ? null : item.id))}
+                              className={`mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-medium transition-colors ${
+                                isSelected
+                                  ? 'border border-slate-200 bg-white text-slate-700 hover:text-slate-950'
+                                  : 'bg-slate-950 text-white hover:bg-slate-800'
+                              }`}
+                            >
+                              {isSelected ? (
+                                <>
+                                  <ArrowLeft className="h-4 w-4" />
+                                  {localizeUi(student?.language, 'Скрыть выбор теста', 'Тест тандоосун жашыруу')}
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="h-4 w-4" />
+                                  {localizeUi(student?.language, 'Выбрать предмет', 'Предметти тандоо')}
+                                </>
+                              )}
+                            </button>
+                          </div>
                         </div>
 
-                        <div className="grid gap-3 md:grid-cols-2">
-                          {item.lines.map((line) => (
-                            <div
-                              key={line.grade}
-                              className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700"
-                            >
-                              <div className="font-medium text-slate-900">{line.label}</div>
-                              <div className="mt-1 text-slate-500">
-                                {localizeUi(student?.language, 'Сейчас', 'Азыр')} {line.available} / {line.required}
+                        {isSelected && (
+                          <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5">
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                              <div className="space-y-3">
+                                <div className="flex flex-wrap items-center gap-3">
+                                  <h3 className="text-xl font-semibold text-slate-950">{mainWindowLabel}</h3>
+                                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
+                                    {item.title}
+                                  </span>
+                                </div>
+                                <p className="max-w-2xl text-sm leading-6 text-slate-600">
+                                  {localizeUi(
+                                    student?.language,
+                                    'Этот тест будет собран по выбранному предмету и вашей паре классов.',
+                                    'Бул тест тандалган предмет жана сиздин класстар жуптугуңуз боюнча түзүлөт.',
+                                  )}
+                                </p>
+                              </div>
+
+                              <div className="w-full max-w-sm rounded-[24px] border border-slate-200 bg-white p-4 lg:w-80">
+                                <div className="text-sm text-slate-600">
+                                  {localizeUi(student?.language, 'Нужно 125 + 125, сейчас', '125 + 125 керек, азыр')}{' '}
+                                  <span className="font-semibold text-slate-950">
+                                    {item.lines.map((line) => line.available).join(' + ')}
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => handleStartMain(item.id)}
+                                  disabled={!isReady || isBusy}
+                                  className={`mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-medium transition-colors ${
+                                    isReady
+                                      ? 'bg-slate-950 text-white hover:bg-slate-800'
+                                      : 'cursor-not-allowed bg-slate-200 text-slate-500'
+                                  }`}
+                                >
+                                  {isBusy ? (
+                                    <>
+                                      <Clock3 className="h-4 w-4 animate-spin" />
+                                      {localizeUi(student?.language, 'Генерируем', 'Түзүп жатабыз')}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play className="h-4 w-4" />
+                                      {isReady
+                                        ? localizeUi(student?.language, 'Начать предметный тест', 'Предметтик тестти баштоо')
+                                        : localizeUi(student?.language, 'Ожидает заполнения', 'Толтурууну күтүп турат')}
+                                    </>
+                                  )}
+                                </button>
                               </div>
                             </div>
-                          ))}
-                        </div>
+                          </div>
+                        )}
                       </div>
-
-                      <div className="w-full max-w-sm rounded-[24px] border border-slate-200 bg-slate-50/90 p-4 lg:w-80">
-                        <div className="text-sm text-slate-600">
-                          {localizeUi(
-                            student?.language,
-                            'Нужно 125 + 125, сейчас',
-                            '125 + 125 керек, азыр',
-                          )}{' '}
-                          <span className="font-semibold text-slate-950">
-                            {item.lines.map((line) => line.available).join(' + ')}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => handleStartMain(item.id)}
-                          disabled={!isReady || isBusy}
-                          className={`mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-medium transition-colors ${
-                            isReady
-                              ? 'bg-slate-950 text-white hover:bg-slate-800'
-                              : 'cursor-not-allowed bg-slate-200 text-slate-500'
-                          }`}
-                        >
-                          {isBusy ? (
-                            <>
-                              <Clock3 className="h-4 w-4 animate-spin" />
-                              {localizeUi(student?.language, 'Генерируем', 'Түзүп жатабыз')}
-                            </>
-                          ) : (
-                            <>
-                              <Play className="h-4 w-4" />
-                              {isReady
-                                ? localizeUi(student?.language, 'Начать предметный тест', 'Предметтик тестти баштоо')
-                                : localizeUi(student?.language, 'Ожидает заполнения', 'Толтурууну күтүп турат')}
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
+                    </article>
+                  );
+                })}
+              </div>
             </div>
           )}
 
