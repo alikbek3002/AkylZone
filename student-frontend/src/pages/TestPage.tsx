@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowRight, ArrowLeft, CheckCircle2, XCircle, Maximize, AlertTriangle } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle2, XCircle, Maximize, AlertTriangle, Shield } from 'lucide-react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import {
@@ -37,7 +37,6 @@ export default function TestPage() {
   const [tabSwitchWarning, setTabSwitchWarning] = useState(false);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
 
-  // Request fullscreen
   const enterFullscreen = useCallback(async () => {
     try {
       const el = document.documentElement;
@@ -48,12 +47,9 @@ export default function TestPage() {
       } else if ((el as any).msRequestFullscreen) {
         await (el as any).msRequestFullscreen();
       }
-    } catch {
-      // Fullscreen may not be available
-    }
+    } catch { /* may not be available */ }
   }, []);
 
-  // Exit fullscreen
   const exitFullscreen = useCallback(async () => {
     try {
       if (document.exitFullscreen) {
@@ -61,9 +57,7 @@ export default function TestPage() {
       } else if ((document as any).webkitExitFullscreen) {
         await (document as any).webkitExitFullscreen();
       }
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   }, []);
 
   if (!testData) {
@@ -73,12 +67,33 @@ export default function TestPage() {
   const testType = testData.test_info.type;
   const isTrial = testType === 'TRIAL';
 
-  // ——— TRIAL ONLY: Full anti-cheat + fullscreen ———
+  // ——— TRIAL ONLY: Full anti-cheat ———
   useEffect(() => {
     if (!isTrial) return;
 
-    // Enter fullscreen on mount for TRIAL
     enterFullscreen();
+
+    const preventEvent = (e: Event) => { e.preventDefault(); };
+
+    const preventShortcuts = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'x', 'p', 's', 'a', 'u'].includes(e.key.toLowerCase())) {
+        e.preventDefault();
+      }
+      if (e.key === 'PrintScreen' || e.key === 'Snapshot') {
+        e.preventDefault();
+        navigator.clipboard?.writeText('').catch(() => {});
+      }
+      if (e.key === 'F12') e.preventDefault();
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase())) {
+        e.preventDefault();
+      }
+      if (e.key === 'Escape') e.preventDefault();
+      if (e.metaKey && e.shiftKey && ['3', '4', '5'].includes(e.key)) {
+        e.preventDefault();
+        navigator.clipboard?.writeText('').catch(() => {});
+      }
+      if (e.altKey && e.key === 'Tab') e.preventDefault();
+    };
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -92,16 +107,45 @@ export default function TestPage() {
       setTabSwitchWarning(true);
     };
 
+    const handlePopState = () => {
+      window.history.pushState({ guard: true }, document.title, window.location.href);
+    };
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    window.history.pushState({ guard: true }, document.title, window.location.href);
+
+    document.addEventListener('copy', preventEvent);
+    document.addEventListener('cut', preventEvent);
+    document.addEventListener('paste', preventEvent);
+    document.addEventListener('contextmenu', preventEvent);
+    document.addEventListener('selectstart', preventEvent);
+    document.addEventListener('dragstart', preventEvent);
+    document.addEventListener('keydown', preventShortcuts);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
+      document.removeEventListener('copy', preventEvent);
+      document.removeEventListener('cut', preventEvent);
+      document.removeEventListener('paste', preventEvent);
+      document.removeEventListener('contextmenu', preventEvent);
+      document.removeEventListener('selectstart', preventEvent);
+      document.removeEventListener('dragstart', preventEvent);
+      document.removeEventListener('keydown', preventShortcuts);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [isTrial, enterFullscreen]);
 
-  // Handle Fullscreen state tracking (TRIAL only)
+  // Fullscreen state tracking (TRIAL only)
   useEffect(() => {
     if (!isTrial) return;
 
@@ -133,9 +177,7 @@ export default function TestPage() {
   const isFirstQuestion = currentQuestionIndex === 0;
 
   const handleAnswerSelect = async (selectedIndex: number) => {
-    if (isAnswering || currentReveal || !currentQuestion) {
-      return;
-    }
+    if (isAnswering || currentReveal || !currentQuestion) return;
 
     setIsAnswering(true);
     setApiError(null);
@@ -148,17 +190,10 @@ export default function TestPage() {
         selected_index: selectedIndex,
       });
 
-      setSelectedAnswers((prev) => ({
-        ...prev,
-        [currentQuestion.id]: selectedIndex,
-      }));
-      setRevealedAnswers((prev) => ({
-        ...prev,
-        [currentQuestion.id]: reveal,
-      }));
+      setSelectedAnswers((prev) => ({ ...prev, [currentQuestion.id]: selectedIndex }));
+      setRevealedAnswers((prev) => ({ ...prev, [currentQuestion.id]: reveal }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Ошибка проверки ответа';
-      setApiError(message);
+      setApiError(error instanceof Error ? error.message : 'Ошибка проверки ответа');
     } finally {
       setIsAnswering(false);
     }
@@ -174,13 +209,9 @@ export default function TestPage() {
         type: testType,
       });
       setSubmitResult(result);
-      // Exit fullscreen after submitting
-      if (isTrial) {
-        exitFullscreen();
-      }
+      if (isTrial) exitFullscreen();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Ошибка отправки результата';
-      setApiError(message);
+      setApiError(error instanceof Error ? error.message : 'Ошибка отправки результата');
     } finally {
       setIsSubmitting(false);
     }
@@ -192,51 +223,67 @@ export default function TestPage() {
   };
 
   const handleGoPrev = () => {
-    if (!isFirstQuestion) {
-      setCurrentQuestionIndex((prev) => prev - 1);
-    }
+    if (!isFirstQuestion) setCurrentQuestionIndex((prev) => prev - 1);
   };
 
   const handleGoNext = () => {
-    if (!isLastQuestion) {
-      setCurrentQuestionIndex((prev) => prev + 1);
-    }
+    if (!isLastQuestion) setCurrentQuestionIndex((prev) => prev + 1);
   };
 
-  // For MAIN test: can always navigate freely
-  // For TRIAL test: must answer current question before going next
   const canGoNext = isTrial ? Boolean(currentReveal) : true;
   const canSubmit = isTrial ? Boolean(currentReveal) : answeredCount === totalQuestions;
 
-  // Submit result screen
+  // ——— Result screen ———
   if (submitResult) {
+    const scoreColor = submitResult.score >= 70
+      ? 'text-emerald-600' : submitResult.score >= 40
+      ? 'text-amber-600' : 'text-rose-600';
+
+    const scoreBg = submitResult.score >= 70
+      ? 'bg-emerald-50 border-emerald-200' : submitResult.score >= 40
+      ? 'bg-amber-50 border-amber-200' : 'bg-rose-50 border-rose-200';
+
+    const scoreIconBg = submitResult.score >= 70
+      ? 'bg-emerald-100 text-emerald-600' : submitResult.score >= 40
+      ? 'bg-amber-100 text-amber-600' : 'bg-rose-100 text-rose-600';
+
     return (
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-50 select-none px-4">
-        <div className="mx-auto max-w-md w-full rounded-2xl sm:rounded-[32px] border border-emerald-200 bg-white p-6 sm:p-8 text-center shadow-[0_22px_65px_-38px_rgba(15,23,42,0.4)]">
-          <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-            <CheckCircle2 className="h-7 w-7" />
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-50 px-4">
+        <div className="mx-auto max-w-md w-full rounded-2xl sm:rounded-[32px] border bg-white p-6 sm:p-8 text-center shadow-[0_22px_65px_-38px_rgba(15,23,42,0.4)]">
+          <div className={`mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full ${scoreIconBg}`}>
+            {submitResult.score >= 70
+              ? <CheckCircle2 className="h-8 w-8" />
+              : <XCircle className="h-8 w-8" />}
           </div>
+
           <h2 className="mt-5 text-2xl sm:text-3xl font-bold text-slate-950">
             {localizeUi(student?.language, 'Тест завершён', 'Тест аяктады')}
           </h2>
-          <p className="mt-2 text-sm text-slate-600">
-            {localizeUi(
-              student?.language,
-              `Правильных ответов: ${submitResult.correct} из ${submitResult.total}`,
-              `Туура жооптор: ${submitResult.correct} / ${submitResult.total}`,
-            )}
-          </p>
-          <p className="mt-1 text-lg font-bold text-slate-900">
-            {localizeUi(student?.language, `Результат: ${submitResult.score}%`, `Жыйынтык: ${submitResult.score}%`)}
-          </p>
-          {tabSwitchCount > 0 && (
-            <p className="mt-2 text-xs text-amber-600 font-medium">
-              {localizeUi(student?.language, `Переключений вкладки: ${tabSwitchCount}`, `Башка вкладкага өтүү: ${tabSwitchCount}`)}
+
+          <div className={`mt-4 mx-auto max-w-[200px] rounded-2xl border p-4 ${scoreBg}`}>
+            <p className={`text-4xl font-black ${scoreColor}`}>{submitResult.score}%</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {localizeUi(student?.language, 'результат', 'жыйынтык')}
             </p>
-          )}
+          </div>
+
+          <div className="mt-4 space-y-1.5 text-sm text-slate-600">
+            <p>
+              {localizeUi(student?.language, 'Правильных', 'Туура жооптор')}: <span className="font-bold text-emerald-600">{submitResult.correct}</span> / {submitResult.total}
+            </p>
+            <p>
+              {localizeUi(student?.language, 'Отвечено', 'Жооп берилди')}: <span className="font-bold text-slate-900">{submitResult.answered}</span> / {submitResult.total}
+            </p>
+            {isTrial && tabSwitchCount > 0 && (
+              <p className="text-amber-600 font-medium">
+                {localizeUi(student?.language, `Переключений вкладки: ${tabSwitchCount}`, `Башка вкладкага өтүү: ${tabSwitchCount}`)}
+              </p>
+            )}
+          </div>
+
           <button
             onClick={handleExitTest}
-            className="mt-6 w-full sm:w-auto inline-flex h-12 items-center justify-center rounded-2xl bg-slate-950 px-6 text-sm font-bold text-white transition-colors hover:bg-slate-800"
+            className="mt-6 w-full sm:w-auto inline-flex h-12 items-center justify-center rounded-2xl bg-slate-950 px-8 text-sm font-bold text-white transition-colors hover:bg-slate-800"
           >
             {localizeUi(student?.language, 'На главную', 'Башкы бетке')}
           </button>
@@ -245,12 +292,14 @@ export default function TestPage() {
     );
   }
 
+  // ——— Test UI ———
   return (
     <div
       ref={containerRef}
       className={`fixed inset-0 z-[9999] overflow-auto bg-white font-sans text-stone-900 ${isTrial ? 'bg-slate-50' : ''}`}
+      style={isTrial ? { WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' } : undefined}
     >
-      {/* Tab switch warning overlay (TRIAL only) */}
+      {/* TRIAL: Tab switch warning */}
       {isTrial && tabSwitchWarning && (
         <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="mx-4 max-w-md rounded-3xl bg-white p-8 text-center shadow-2xl">
@@ -263,7 +312,7 @@ export default function TestPage() {
             <p className="mt-2 text-sm text-slate-600 leading-relaxed">
               {localizeUi(
                 student?.language,
-                'Вы покинули окно теста. Это было зафиксировано. Пожалуйста, не переключайтесь на другие вкладки и приложения во время теста.',
+                'Вы покинули окно теста. Это было зафиксировано. Не переключайтесь на другие вкладки и приложения во время теста.',
                 'Сиз тест терезесинен чыктыңыз. Бул жазылды. Тест учурунда башка өтмөктөргө жана колдонмолорго өтпөңүз.',
               )}
             </p>
@@ -271,10 +320,7 @@ export default function TestPage() {
               {localizeUi(student?.language, `Переключений: ${tabSwitchCount}`, `Өтүүлөр: ${tabSwitchCount}`)}
             </p>
             <button
-              onClick={() => {
-                setTabSwitchWarning(false);
-                enterFullscreen();
-              }}
+              onClick={() => { setTabSwitchWarning(false); enterFullscreen(); }}
               className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-medium text-white hover:bg-slate-800 transition-colors"
             >
               {localizeUi(student?.language, 'Продолжить тест', 'Тестти улантуу')}
@@ -283,7 +329,7 @@ export default function TestPage() {
         </div>
       )}
 
-      {/* Fullscreen prompt if not in fullscreen (ONLY FOR TRIAL) */}
+      {/* TRIAL: Fullscreen prompt */}
       {isTrial && !isFullscreen && !tabSwitchWarning && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="mx-4 max-w-md rounded-3xl bg-white p-8 text-center shadow-2xl">
@@ -296,8 +342,8 @@ export default function TestPage() {
             <p className="mt-2 text-sm text-slate-600 leading-relaxed">
               {localizeUi(
                 student?.language,
-                'Для прохождения теста необходимо включить полноэкранный режим. Это требуется для обеспечения честности тестирования.',
-                'Тесттен өтүү үчүн толук экран режимин иштетүү зарыл. Бул тестирлөөнүн адилеттүүлүгүн камсыз кылуу үчүн талап кылынат.',
+                'Для прохождения теста необходимо включить полноэкранный режим.',
+                'Тесттен өтүү үчүн толук экран режимин иштетүү зарыл.',
               )}
             </p>
             <button
@@ -312,15 +358,22 @@ export default function TestPage() {
       )}
 
       <div className="mx-auto max-w-3xl px-3 sm:px-4 py-3 sm:py-8">
-        {/* Top bar: exit + progress */}
+        {/* Top bar */}
         <div className="flex items-center justify-between mb-4 sm:mb-6">
-          <button
-            onClick={handleExitTest}
-            className="flex items-center gap-1.5 text-xs sm:text-sm font-medium text-stone-400 hover:text-stone-900 transition-colors"
-          >
-            <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            {localizeUi(student?.language, 'Выйти', 'Чыгуу')}
-          </button>
+          {isTrial ? (
+            <div className="flex items-center gap-1.5 text-xs sm:text-sm font-medium text-rose-400">
+              <Shield className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              {localizeUi(student?.language, 'Сынамык режим', 'Сынамык режими')}
+            </div>
+          ) : (
+            <button
+              onClick={handleExitTest}
+              className="flex items-center gap-1.5 text-xs sm:text-sm font-medium text-stone-400 hover:text-stone-900 transition-colors"
+            >
+              <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              {localizeUi(student?.language, 'Выйти', 'Чыгуу')}
+            </button>
+          )}
 
           <div className="flex items-center gap-2 sm:gap-3">
             {isTrial && tabSwitchCount > 0 && (
@@ -477,7 +530,6 @@ export default function TestPage() {
           </button>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Submit */}
             {isTrial ? (
               isLastQuestion && (
                 <button
@@ -510,7 +562,6 @@ export default function TestPage() {
               )
             )}
 
-            {/* Next */}
             {!isLastQuestion && (
               <button
                 onClick={handleGoNext}
