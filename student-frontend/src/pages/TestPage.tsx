@@ -80,65 +80,6 @@ export default function TestPage() {
     // Enter fullscreen on mount for TRIAL
     enterFullscreen();
 
-    // Anti-cheat: Block copy/cut/paste
-    const preventClipboard = (e: Event) => {
-      e.preventDefault();
-    };
-
-    // Anti-cheat: Block context menu
-    const preventContextMenu = (e: Event) => {
-      e.preventDefault();
-    };
-
-    // Anti-cheat: Block shortcuts (Ctrl+C, Cmd+C, PrintScreen, etc.)
-    const preventShortcuts = (e: KeyboardEvent) => {
-      // Block copy/paste/print/save/select-all shortcuts
-      if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'x', 'p', 's', 'a', 'u'].includes(e.key.toLowerCase())) {
-        e.preventDefault();
-      }
-      // Block PrintScreen
-      if (e.key === 'PrintScreen' || e.key === 'Snapshot') {
-        e.preventDefault();
-        navigator.clipboard?.writeText('').catch(() => { });
-      }
-      // Block F12 (DevTools)
-      if (e.key === 'F12') {
-        e.preventDefault();
-      }
-      // Block Ctrl+Shift+I (DevTools)
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'i') {
-        e.preventDefault();
-      }
-      // Block Ctrl+Shift+J (Console)
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'j') {
-        e.preventDefault();
-      }
-      // Block Escape to prevent easy fullscreen exit
-      if (e.key === 'Escape') {
-        e.preventDefault();
-      }
-      // Block Mac screenshot shortcuts (Cmd+Shift+3/4/5)
-      if (e.metaKey && e.shiftKey && ['3', '4', '5'].includes(e.key)) {
-        e.preventDefault();
-        navigator.clipboard?.writeText('').catch(() => { });
-      }
-      // Block Alt+Tab-like behavior
-      if (e.altKey && e.key === 'Tab') {
-        e.preventDefault();
-      }
-    };
-
-    // Anti-cheat: Block drag
-    const preventDrag = (e: Event) => {
-      e.preventDefault();
-    };
-
-    // Anti-cheat: Block selection
-    const preventSelection = (e: Event) => {
-      e.preventDefault();
-    };
-
-    // Anti-cheat: Detect tab switch / window blur  
     const handleVisibilityChange = () => {
       if (document.hidden) {
         setTabSwitchCount((prev) => prev + 1);
@@ -146,50 +87,17 @@ export default function TestPage() {
       }
     };
 
-    // Anti-cheat: Detect window blur
     const handleBlur = () => {
       setTabSwitchCount((prev) => prev + 1);
       setTabSwitchWarning(true);
     };
 
-    // Anti-cheat: Block navigation (back/forward)
-    const handlePopState = () => {
-      window.history.pushState({ antiCheatGuard: true }, document.title, window.location.href);
-    };
-
-    // Anti-cheat: Block page unload
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-
-    // Push state to prevent back navigation
-    window.history.pushState({ antiCheatGuard: true }, document.title, window.location.href);
-
-    document.addEventListener('copy', preventClipboard);
-    document.addEventListener('cut', preventClipboard);
-    document.addEventListener('paste', preventClipboard);
-    document.addEventListener('contextmenu', preventContextMenu);
-    document.addEventListener('keydown', preventShortcuts);
-    document.addEventListener('dragstart', preventDrag);
-    document.addEventListener('selectstart', preventSelection);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
-    window.addEventListener('popstate', handlePopState);
-    window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
-      document.removeEventListener('copy', preventClipboard);
-      document.removeEventListener('cut', preventClipboard);
-      document.removeEventListener('paste', preventClipboard);
-      document.removeEventListener('contextmenu', preventContextMenu);
-      document.removeEventListener('keydown', preventShortcuts);
-      document.removeEventListener('dragstart', preventDrag);
-      document.removeEventListener('selectstart', preventSelection);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
-      window.removeEventListener('popstate', handlePopState);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [isTrial, enterFullscreen]);
 
@@ -340,12 +248,7 @@ export default function TestPage() {
   return (
     <div
       ref={containerRef}
-      className={`fixed inset-0 z-[9999] overflow-auto select-none bg-white font-sans text-stone-900 ${isTrial ? 'bg-slate-50' : ''}`}
-      style={isTrial ? {
-        WebkitUserSelect: 'none',
-        userSelect: 'none',
-        WebkitTouchCallout: 'none',
-      } : undefined}
+      className={`fixed inset-0 z-[9999] overflow-auto bg-white font-sans text-stone-900 ${isTrial ? 'bg-slate-50' : ''}`}
     >
       {/* Tab switch warning overlay (TRIAL only) */}
       {isTrial && tabSwitchWarning && (
