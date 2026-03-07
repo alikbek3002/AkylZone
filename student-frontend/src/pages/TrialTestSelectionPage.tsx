@@ -34,7 +34,7 @@ export default function TrialTestSelectionPage() {
                 if (trial) {
                     setTrialNode(trial);
                 } else {
-                    setError(localizeUi(student?.language, 'Санык тесты не найдены.', 'Санык тесттер табылган жок.'));
+                    setError(localizeUi(student?.language, 'Сынамык тесты не найдены.', 'Сынамык тесттер табылган жок.'));
                 }
             } catch (err: any) {
                 setError(err.message || 'Error loading catalog');
@@ -106,10 +106,10 @@ export default function TrialTestSelectionPage() {
                 {/* Title */}
                 <div className="mb-8 sm:mb-10">
                     <h1 className="text-2xl sm:text-4xl font-black text-black">
-                        {localizeUi(student?.language, 'Санык тест', 'Санык тест')}
+                        {localizeUi(student?.language, 'Сынамык тест', 'Сынамык тест')}
                     </h1>
                     <p className="mt-2 text-sm sm:text-base text-stone-500 font-medium">
-                        {localizeUi(student?.language, 'Выберите тур, чтобы начать тестирование.', 'Санык тестти баштоо үчүн турду тандаңыз.')}
+                        {localizeUi(student?.language, 'Выберите тур, чтобы начать тестирование.', 'Сынамык тестти баштоо үчүн турду тандаңыз.')}
                     </p>
                 </div>
 
@@ -172,7 +172,7 @@ export default function TrialTestSelectionPage() {
                             ) : (
                                 <>
                                     <Sparkles className="h-5 w-5 text-stone-400" />
-                                    {localizeUi(student?.language, 'Начать санык тест', 'Санык тестти баштоо')}
+                                    {localizeUi(student?.language, 'Начать сынамык тест', 'Сынамык тестти баштоо')}
                                 </>
                             )}
                         </button>

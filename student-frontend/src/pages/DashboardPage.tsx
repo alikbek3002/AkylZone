@@ -132,7 +132,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h2 className="text-base sm:text-2xl font-bold mb-0.5 sm:mb-1 truncate">
-                    {localizeUi(student?.language, 'Санык тест', 'Санык тест')}
+                    {localizeUi(student?.language, 'Сынамык тест', 'Сынамык тест')}
                   </h2>
                   <p className="text-stone-500 text-xs sm:text-sm leading-relaxed line-clamp-2">
                     {localizeUi(student?.language, 'Пройдите комплексную симуляцию реального экзамена по всем дисциплинам.', 'Бардык сабактар боюнча реалдуу экзамендин комплекстүү симуляциясынан өтүңүз.')}

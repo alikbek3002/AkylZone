@@ -60,7 +60,7 @@ function getBranchTitle(language) {
 
 function getTestTypeTitle(type, language) {
   if (String(type || '').toUpperCase() === 'TRIAL') {
-    return 'Пробный тест';
+    return localizeText(language, 'Сынамык тест', 'Сынамык тест');
   }
 
   return localizeText(language, 'Предметный тест', 'Предметтик тест');

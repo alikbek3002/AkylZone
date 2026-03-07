@@ -437,7 +437,7 @@ export default function TestPage() {
             {currentQuestionIndex + 1}<span className="text-stone-300">/{totalQuestions}</span>
           </h1>
           <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-stone-400">
-            {isTrial ? localizeUi(student?.language, 'Санык', 'Санык') : (testData.test_info.subject || '')}
+            {isTrial ? localizeUi(student?.language, 'Сынамык', 'Сынамык') : (testData.test_info.subject || '')}
           </span>
         </div>
 
