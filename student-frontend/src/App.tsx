@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import TestPage from './pages/TestPage';
+import MainTestSelectionPage from './pages/MainTestSelectionPage';
+import TrialTestSelectionPage from './pages/TrialTestSelectionPage';
 import { useAuthStore } from './store/authStore';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -25,6 +27,22 @@ function App() {
           element={(
             <ProtectedRoute>
               <DashboardPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/select/main"
+          element={(
+            <ProtectedRoute>
+              <MainTestSelectionPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/select/trial"
+          element={(
+            <ProtectedRoute>
+              <TrialTestSelectionPage />
             </ProtectedRoute>
           )}
         />

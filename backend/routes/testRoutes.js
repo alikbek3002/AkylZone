@@ -353,14 +353,24 @@ router.post('/generate', async (req, res) => {
       }
 
       const leaf = mainNode?.items?.find((item) => item.id === normalizedSubject) || null;
-      if (!leaf || leaf.status !== 'ready') {
+
+      let isReady = false;
+      let linesToFetch = [];
+
+      if (leaf) {
+        if (requestedGrade) {
+          const requestedLine = leaf.lines.find((line) => line.grade === requestedGrade);
+          isReady = requestedLine && requestedLine.available >= requestedLine.required;
+          if (isReady) linesToFetch = [requestedLine];
+        } else {
+          isReady = leaf.status === 'ready';
+          if (isReady) linesToFetch = leaf.lines;
+        }
+      }
+
+      if (!isReady) {
         blockedLeaf = leaf || { id: normalizedSubject, status: 'locked', lines: [] };
       } else {
-        // Only fetch the requested grade if provided, otherwise fallback to the original behavior and fetch both
-        const linesToFetch = requestedGrade
-          ? leaf.lines.filter((line) => line.grade === requestedGrade)
-          : leaf.lines;
-          
         for (const line of linesToFetch) {
           fetchPlan.push({
             subject: normalizedSubject,

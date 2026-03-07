@@ -610,4 +610,77 @@ router.post('/questions', requireAdmin, async (req, res) => {
   }
 });
 
+
+// ─── GET questions (list with filters) ───────────────────────────────────────
+router.get('/questions', requireAdmin, async (req, res) => {
+  try {
+    const subject = String(req.query.subject || '').trim().toLowerCase();
+    const language = normalizeLanguage(req.query.language);
+    const grade = parseGrade(req.query.grade);
+    if (!SUBJECTS.includes(subject)) return res.status(400).json({ error: 'Invalid subject' });
+    if (!LANGUAGES.includes(language)) return res.status(400).json({ error: 'Invalid language' });
+    if (!grade || !QUESTION_GRADES.includes(grade)) return res.status(400).json({ error: 'Invalid grade' });
+    const tableName = buildQuestionTableName(subject, language, grade);
+    const { data, error } = await supabase.from(tableName)
+      .select('id, question_text, options, topic, explanation, image_url, created_at')
+      .order('created_at', { ascending: false });
+    if (error) { console.error('Fetch questions error:', error); return res.status(500).json({ error: 'Failed to fetch questions' }); }
+    return res.json({ questions: data || [], table: tableName, total: (data || []).length });
+  } catch (error) { console.error('Get questions error:', error); return res.status(500).json({ error: 'Internal server error' }); }
+});
+
+// ─── PATCH question (edit) ──────────────────────────────────────────────────
+router.patch('/questions/:id', requireAdmin, async (req, res) => {
+  try {
+    const questionId = String(req.params.id || '').trim();
+    const { subject, language: rawLanguage, grade: rawGrade, questionText, options, topic, explanation, imageUrl } = req.body || {};
+    const language = normalizeLanguage(rawLanguage);
+    const grade = parseGrade(rawGrade);
+    const normalizedSubject = String(subject || '').trim().toLowerCase();
+    if (!SUBJECTS.includes(normalizedSubject)) return res.status(400).json({ error: 'Invalid subject' });
+    if (!LANGUAGES.includes(language)) return res.status(400).json({ error: 'Invalid language' });
+    if (!grade || !QUESTION_GRADES.includes(grade)) return res.status(400).json({ error: 'Invalid grade' });
+    const tableName = buildQuestionTableName(normalizedSubject, language, grade);
+    const updates = {};
+    if (questionText !== undefined) {
+      const text = String(questionText || '').trim();
+      if (!text) return res.status(400).json({ error: 'Question text cannot be empty' });
+      updates.question_text = text;
+    }
+    if (options !== undefined) {
+      const qOpts = Array.isArray(options) ? options : [];
+      if (qOpts.length < 2) return res.status(400).json({ error: 'At least two options required' });
+      const valid = qOpts.map((o) => ({ text: String(o?.text || '').trim(), is_correct: Boolean(o?.is_correct) }));
+      if (valid.some((o) => !o.text)) return res.status(400).json({ error: 'All options must have text' });
+      if (valid.filter((o) => o.is_correct).length !== 1) return res.status(400).json({ error: 'Exactly one correct option required' });
+      updates.options = valid;
+    }
+    if (topic !== undefined) updates.topic = String(topic || '').trim();
+    if (explanation !== undefined) updates.explanation = String(explanation || '').trim();
+    if (imageUrl !== undefined) updates.image_url = String(imageUrl || '').trim();
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No updates provided' });
+    const { data, error } = await supabase.from(tableName).update(updates).eq('id', questionId)
+      .select('id, question_text, options, topic, explanation, image_url, created_at').single();
+    if (error) { console.error('Update question error:', error); return res.status(500).json({ error: 'Failed to update question' }); }
+    return res.json({ question: data });
+  } catch (error) { console.error('Patch question error:', error); return res.status(500).json({ error: 'Internal server error' }); }
+});
+
+// ─── DELETE question ────────────────────────────────────────────────────────
+router.delete('/questions/:id', requireAdmin, async (req, res) => {
+  try {
+    const questionId = String(req.params.id || '').trim();
+    const subject = String(req.query.subject || '').trim().toLowerCase();
+    const language = normalizeLanguage(req.query.language);
+    const grade = parseGrade(req.query.grade);
+    if (!SUBJECTS.includes(subject)) return res.status(400).json({ error: 'Invalid subject' });
+    if (!LANGUAGES.includes(language)) return res.status(400).json({ error: 'Invalid language' });
+    if (!grade || !QUESTION_GRADES.includes(grade)) return res.status(400).json({ error: 'Invalid grade' });
+    const tableName = buildQuestionTableName(subject, language, grade);
+    const { error } = await supabase.from(tableName).delete().eq('id', questionId);
+    if (error) { console.error('Delete question error:', error); return res.status(500).json({ error: 'Failed to delete question' }); }
+    return res.status(204).send();
+  } catch (error) { console.error('Delete question error:', error); return res.status(500).json({ error: 'Internal server error' }); }
+});
+
 module.exports = router;

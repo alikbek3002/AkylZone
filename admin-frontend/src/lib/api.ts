@@ -112,6 +112,26 @@ export interface ReadinessBranch {
   >;
 }
 
+// ─── Question types ─────────────────────────────────────────────────────────
+
+export interface Question {
+  id: string;
+  question_text: string;
+  options: Array<{ text: string; is_correct: boolean }>;
+  topic: string;
+  explanation: string;
+  image_url: string;
+  created_at: string;
+}
+
+interface QuestionsResponse {
+  questions: Question[];
+  table: string;
+  total: number;
+}
+
+// ─── HTTP helper ────────────────────────────────────────────────────────────
+
 type RequestMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
 async function request<T>(
@@ -157,6 +177,8 @@ async function request<T>(
   return data as T;
 }
 
+// ─── Auth ───────────────────────────────────────────────────────────────────
+
 export function adminLogin(username: string, password: string) {
   return request<LoginResponse>(
     '/admin/login',
@@ -165,6 +187,8 @@ export function adminLogin(username: string, password: string) {
     false,
   );
 }
+
+// ─── Students ───────────────────────────────────────────────────────────────
 
 export async function fetchStudents() {
   const response = await request<StudentsResponse>('/admin/students', 'GET');
@@ -180,14 +204,55 @@ export function deleteStudent(studentId: string) {
   return request<null>(`/admin/students/${studentId}`, 'DELETE');
 }
 
+// ─── Questions ──────────────────────────────────────────────────────────────
+
 export function addQuestion(payload: AddQuestionPayload) {
   return request('/admin/questions', 'POST', payload);
 }
+
+export async function fetchQuestions(subject: string, language: string, grade: number) {
+  return request<QuestionsResponse>(
+    `/admin/questions?subject=${subject}&language=${language}&grade=${grade}`,
+    'GET',
+  );
+}
+
+export async function updateQuestion(
+  questionId: string,
+  payload: {
+    subject: string;
+    language: string;
+    grade: number;
+    questionText?: string;
+    options?: Array<{ text: string; is_correct: boolean }>;
+    topic?: string;
+    explanation?: string;
+    imageUrl?: string;
+  },
+) {
+  return request<{ question: Question }>(`/admin/questions/${questionId}`, 'PATCH', payload);
+}
+
+export async function deleteQuestion(
+  questionId: string,
+  subject: string,
+  language: string,
+  grade: number,
+) {
+  return request<null>(
+    `/admin/questions/${questionId}?subject=${subject}&language=${language}&grade=${grade}`,
+    'DELETE',
+  );
+}
+
+// ─── Content Readiness ──────────────────────────────────────────────────────
 
 export async function fetchContentReadiness() {
   const response = await request<{ branches: ReadinessBranch[] }>('/admin/content-readiness', 'GET');
   return response.branches;
 }
+
+// ─── Image Upload ───────────────────────────────────────────────────────────
 
 export async function uploadImage(file: File): Promise<{ imageUrl: string }> {
   const token = useAdminAuthStore.getState().token;

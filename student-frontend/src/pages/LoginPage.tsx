@@ -4,13 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { loginStudent } from "../lib/api";
 import { motion } from "framer-motion";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-// utility for classes
-export function cn(...inputs: ClassValue[]) {
-    return twMerge(clsx(inputs));
-}
+import logo from "../assets/logo.jpg";
 
 const LoginPage = () => {
     const { setStudent } = useAuthStore();
@@ -52,101 +46,90 @@ const LoginPage = () => {
     };
 
     return (
-        <section className="bg-slate-50 min-h-screen flex items-center justify-center p-4">
+        <section className="min-h-screen flex items-center justify-center px-4 py-8 bg-stone-50">
             <div className="w-full max-w-md">
-                <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-                    <motion.div
-                        variants={containerVariants}
-                        initial="hidden"
-                        animate="visible"
-                        className="relative z-10 p-8"
-                    >
-                        <motion.div variants={itemVariants} className="mb-8 text-center">
-                            <h1 className="text-3xl font-semibold text-slate-900">Портал Ученика</h1>
-                            <p className="mt-2 text-sm text-slate-500">Войдите для доступа к платформе</p>
+                <motion.div
+                    variants={containerVariants}
+                    initial="hidden"
+                    animate="visible"
+                    className="rounded-3xl border-2 border-stone-200 bg-white p-6 sm:p-10 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.15)]"
+                >
+                    <motion.div variants={itemVariants} className="mb-10 text-center">
+                        <img src={logo} alt="AkylZone" className="mx-auto h-20 sm:h-24 w-auto mb-6" />
+                        <h1 className="text-2xl sm:text-3xl font-black text-black">Портал Ученика</h1>
+                        <p className="mt-2 text-sm text-stone-500 font-medium">Войдите для доступа к платформе</p>
+                    </motion.div>
+
+                    {error && (
+                        <motion.div
+                            variants={itemVariants}
+                            className="mb-6 rounded-2xl border-2 border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
+                        >
+                            {error}
+                        </motion.div>
+                    )}
+
+                    <form onSubmit={handleLogin} className="space-y-5">
+                        <motion.div variants={itemVariants} className="space-y-2">
+                            <label htmlFor="username" className="text-sm font-bold text-stone-800">
+                                Логин
+                            </label>
+                            <input
+                                id="username"
+                                type="text"
+                                placeholder="Введите логин"
+                                value={username}
+                                onChange={(event) => setUsername(event.target.value)}
+                                disabled={isLoading}
+                                className="flex h-12 w-full rounded-xl border-2 border-stone-200 bg-white px-4 text-base font-medium placeholder:text-stone-400 focus:outline-none focus:border-black transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                required
+                            />
                         </motion.div>
 
-                        {error && (
-                            <motion.div
-                                variants={itemVariants}
-                                className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-                            >
-                                {error}
-                            </motion.div>
-                        )}
-
-                        <form onSubmit={handleLogin} className="space-y-6">
-                            <motion.div variants={itemVariants} className="space-y-2">
-                                <label
-                                    htmlFor="username"
-                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-slate-900"
-                                >
-                                    Логин
-                                </label>
+                        <motion.div variants={itemVariants} className="space-y-2">
+                            <label htmlFor="password" className="text-sm font-bold text-stone-800">
+                                Пароль
+                            </label>
+                            <div className="relative">
                                 <input
-                                    id="username"
-                                    type="text"
-                                    placeholder="Введите логин"
-                                    value={username}
-                                    onChange={(event) => setUsername(event.target.value)}
+                                    id="password"
+                                    type={showPassword ? "text" : "password"}
+                                    placeholder="Введите пароль"
+                                    value={password}
+                                    onChange={(event) => setPassword(event.target.value)}
                                     disabled={isLoading}
-                                    className="flex h-10 w-full rounded-md border border-slate-300 bg-transparent px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="flex h-12 w-full rounded-xl border-2 border-stone-200 bg-white px-4 pr-12 text-base font-medium placeholder:text-stone-400 focus:outline-none focus:border-black transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                                     required
                                 />
-                            </motion.div>
-
-                            <motion.div variants={itemVariants} className="space-y-2">
-                                <label
-                                    htmlFor="password"
-                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-slate-900"
-                                >
-                                    Пароль
-                                </label>
-                                <div className="relative">
-                                    <input
-                                        id="password"
-                                        type={showPassword ? "text" : "password"}
-                                        placeholder="••••••••"
-                                        value={password}
-                                        onChange={(event) => setPassword(event.target.value)}
-                                        disabled={isLoading}
-                                        className="flex h-10 w-full rounded-md border border-slate-300 bg-transparent px-3 py-2 pr-10 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-                                        required
-                                    />
-                                    <button
-                                        type="button"
-                                        className="absolute right-0 top-0 h-full px-3 py-2 text-slate-500 hover:text-slate-900 focus:outline-none disabled:opacity-50"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        disabled={isLoading}
-                                    >
-                                        {showPassword ? (
-                                            <EyeOff className="h-4 w-4" />
-                                        ) : (
-                                            <Eye className="h-4 w-4" />
-                                        )}
-                                    </button>
-                                </div>
-                            </motion.div>
-
-                            <motion.div variants={itemVariants}>
                                 <button
-                                    type="submit"
+                                    type="button"
+                                    className="absolute right-0 top-0 h-full px-4 text-stone-400 hover:text-stone-900 focus:outline-none transition-colors"
+                                    onClick={() => setShowPassword(!showPassword)}
                                     disabled={isLoading}
-                                    className="inline-flex w-full items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-blue-600 text-white hover:bg-blue-700 h-11"
                                 >
-                                    {isLoading ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Вход...
-                                        </>
-                                    ) : (
-                                        "Войти"
-                                    )}
+                                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                                 </button>
-                            </motion.div>
-                        </form>
-                    </motion.div>
-                </div>
+                            </div>
+                        </motion.div>
+
+                        <motion.div variants={itemVariants} className="pt-2">
+                            <button
+                                type="submit"
+                                disabled={isLoading}
+                                className="inline-flex w-full h-14 items-center justify-center rounded-2xl bg-black text-white text-base font-bold transition-all hover:opacity-90 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                        Вход...
+                                    </>
+                                ) : (
+                                    "Войти"
+                                )}
+                            </button>
+                        </motion.div>
+                    </form>
+                </motion.div>
             </div>
         </section>
     );
