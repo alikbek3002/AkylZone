@@ -1,72 +1,32 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, LockKeyhole, Play, Sparkles, XCircle } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useAntiCheat, type AntiCheatViolation } from '../hooks/useAntiCheat';
+import { useAuthStore } from '../store/authStore';
 import {
+  answerStudentQuestion,
   fetchAvailableTests,
   generateStudentTest,
   submitStudentTest,
+  type AnswerQuestionResponse,
   type AvailableResponse,
   type GeneratedTestResponse,
   type SubmitTestResponse,
-  type TerminationPayload,
 } from '../lib/api';
-import { useAuthStore } from '../store/authStore';
 
-type TestType = 'MAIN' | 'TRIAL';
-type TestPhase = 'setup' | 'active' | 'finished';
-
-interface FullscreenElement extends HTMLElement {
-  webkitRequestFullscreen?: () => Promise<void> | void;
+function normalizeTestType(value: string | undefined): 'MAIN' | 'TRIAL' | null {
+  const upper = String(value || '').trim().toUpperCase();
+  return upper === 'MAIN' || upper === 'TRIAL' ? upper : null;
 }
 
-interface FullscreenDocument extends Document {
-  webkitExitFullscreen?: () => Promise<void> | void;
+function localizeUi(language: 'ru' | 'kg' | undefined, ruText: string, kgText: string) {
+  return language === 'kg' ? kgText : ruText;
 }
 
-interface LockedState {
-  termination: TerminationPayload;
-  isSubmitting: boolean;
-  submitError: string | null;
+function getProgressLabel(answered: number, total: number, language: 'ru' | 'kg' | undefined) {
+  return localizeUi(language, `Отвечено ${answered} из ${total}`, `${answered} / ${total} жооп берилди`);
 }
 
-function normalizeTestType(value: string | undefined): TestType | null {
-  const upper = String(value || '').toUpperCase();
-  if (upper === 'MAIN' || upper === 'TRIAL') {
-    return upper;
-  }
-  return null;
-}
-
-async function requestDocumentFullscreen() {
-  if (document.fullscreenElement) {
-    return;
-  }
-
-  const root = document.documentElement as FullscreenElement;
-  if (root.requestFullscreen) {
-    await root.requestFullscreen();
-    return;
-  }
-
-  if (root.webkitRequestFullscreen) {
-    await root.webkitRequestFullscreen();
-    return;
-  }
-
-  throw new Error('Fullscreen API is not available');
-}
-
-async function exitDocumentFullscreen() {
-  const fullscreenDocument = document as FullscreenDocument;
-  if (document.fullscreenElement && fullscreenDocument.exitFullscreen) {
-    await fullscreenDocument.exitFullscreen();
-    return;
-  }
-
-  if (fullscreenDocument.webkitExitFullscreen) {
-    await fullscreenDocument.webkitExitFullscreen();
-  }
-}
+type RevealState = Record<string, AnswerQuestionResponse>;
 
 export default function TestPage() {
   const { id: rawTestType } = useParams();
@@ -74,32 +34,19 @@ export default function TestPage() {
   const { student, token } = useAuthStore();
   const navigate = useNavigate();
 
-  const [phase, setPhase] = useState<TestPhase>('setup');
   const [availableData, setAvailableData] = useState<AvailableResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const [selectedSubject, setSelectedSubject] = useState('');
-  const [selectedRound, setSelectedRound] = useState(1);
-
   const [testData, setTestData] = useState<GeneratedTestResponse | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
+  const [revealedAnswers, setRevealedAnswers] = useState<RevealState>({});
   const [submitResult, setSubmitResult] = useState<SubmitTestResponse | null>(null);
-  const [finalTermination, setFinalTermination] = useState<TerminationPayload | null>(null);
 
-  const [lockedState, setLockedState] = useState<LockedState | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState<string | number | null>(null);
+  const [isAnswering, setIsAnswering] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const returnToDashboard = useCallback(async () => {
-    try {
-      await exitDocumentFullscreen();
-    } catch {
-      // Ignore fullscreen exit failures on navigation.
-    }
-    navigate('/dashboard', { replace: true });
-  }, [navigate]);
 
   useEffect(() => {
     if (!student || !token) {
@@ -112,510 +59,590 @@ export default function TestPage() {
       return;
     }
 
-    const loadAvailable = async () => {
+    const loadTree = async () => {
       setLoading(true);
       setApiError(null);
 
       try {
         const data = await fetchAvailableTests(token);
         setAvailableData(data);
-
-        if (data.subjects.length > 0) {
-          setSelectedSubject(data.subjects[0].id);
-        }
-
-        if (data.rounds.length > 0) {
-          setSelectedRound(data.rounds[0].id);
-        }
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Ошибка загрузки параметров теста';
+        const message = error instanceof Error ? error.message : 'Ошибка загрузки дерева тестов';
         setApiError(message);
       } finally {
         setLoading(false);
       }
     };
 
-    void loadAvailable();
-  }, [student, token, testType, navigate]);
+    void loadTree();
+  }, [navigate, student, testType, token]);
 
-  const setupLabel = useMemo(() => {
-    if (testType === 'MAIN') {
-      return student?.language === 'kg' ? 'Предметтик тест' : 'Предметный тест';
-    }
+  const activeNode = availableData?.test_types.find((node) => node.id === testType);
+  const currentQuestion = testData?.questions[currentQuestionIndex] || null;
+  const currentReveal = currentQuestion ? revealedAnswers[currentQuestion.id] : undefined;
+  const currentSelectedIndex = currentQuestion ? selectedAnswers[currentQuestion.id] : undefined;
+  const answeredCount = Object.keys(revealedAnswers).length;
 
-    return 'Пробный тест';
-  }, [student?.language, testType]);
-
-  const submitCurrentTest = useCallback(
-    async (termination?: TerminationPayload, keepalive?: boolean) => {
-      if (!token || !testData || !testType) {
-        throw new Error('Тестовая сессия недоступна');
-      }
-
-      return submitStudentTest(
-        token,
-        {
-          test_session_id: testData.test_session_id,
-          type: testType,
-          answers,
-          termination,
-        },
-        keepalive ? { keepalive: true } : undefined,
-      );
-    },
-    [answers, testData, testType, token],
-  );
-
-  const submitViolation = useCallback(
-    async (termination: TerminationPayload) => {
-      try {
-        const result = await submitCurrentTest(termination, true);
-        setSubmitResult(result);
-        setFinalTermination(termination);
-        setPhase('finished');
-        setLockedState(null);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Ошибка автоматической отправки результатов';
-        setLockedState({
-          termination,
-          isSubmitting: false,
-          submitError: message,
-        });
-      }
-    },
-    [submitCurrentTest],
-  );
-
-  const handleViolation = useCallback(
-    (violation: AntiCheatViolation) => {
-      if (phase !== 'active' || lockedState || !testData) {
-        return;
-      }
-
-      const termination: TerminationPayload = {
-        mode: 'violation',
-        reason: violation.reason,
-        source: violation.source,
-        triggered_at: violation.triggered_at,
-      };
-
-      setApiError(null);
-      setLockedState({
-        termination,
-        isSubmitting: true,
-        submitError: null,
-      });
-
-      void submitViolation(termination);
-    },
-    [lockedState, phase, submitViolation, testData],
-  );
-
-  const { containerProps } = useAntiCheat({
-    isActive: phase === 'active' && Boolean(testData) && lockedState === null,
-    onViolation: handleViolation,
-  });
-
-  const activeQuestion = testData?.questions[currentQuestionIndex] ?? null;
-  const totalQuestions = testData?.questions.length ?? 0;
-  const answeredCount = Object.keys(answers).length;
-  const selectedAnswer = activeQuestion ? answers[activeQuestion.id] : undefined;
-  const isCurrentAnswered = selectedAnswer !== undefined;
-  const isLastQuestion = totalQuestions > 0 && currentQuestionIndex === totalQuestions - 1;
-
-  const handleStart = async () => {
-    if (!token || !testType) {
+  const handleStartMain = async (subjectId: string) => {
+    if (!token || testType !== 'MAIN') {
       return;
     }
 
-    if (testType === 'MAIN' && !selectedSubject) {
-      setApiError('Выберите предмет для тестирования');
-      return;
-    }
-
+    setIsGenerating(subjectId);
     setApiError(null);
-    setSubmitResult(null);
-    setFinalTermination(null);
-    setLockedState(null);
-    setIsGenerating(true);
-
-    try {
-      await requestDocumentFullscreen();
-    } catch {
-      setApiError('Для начала теста необходимо разрешить полноэкранный режим.');
-      setIsGenerating(false);
-      return;
-    }
 
     try {
       const data = await generateStudentTest(token, {
-        type: testType,
-        subject: testType === 'MAIN' ? selectedSubject : undefined,
-        round: testType === 'TRIAL' ? selectedRound : undefined,
+        type: 'MAIN',
+        subject: subjectId,
       });
-
       setTestData(data);
       setCurrentQuestionIndex(0);
-      setAnswers({});
-      setPhase('active');
+      setSelectedAnswers({});
+      setRevealedAnswers({});
+      setSubmitResult(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Ошибка генерации теста';
       setApiError(message);
-
-      try {
-        await exitDocumentFullscreen();
-      } catch {
-        // Ignore fullscreen exit failures after generation errors.
-      }
     } finally {
-      setIsGenerating(false);
+      setIsGenerating(null);
     }
   };
 
-  const handleAnswerSelect = (index: number) => {
-    if (!activeQuestion || isCurrentAnswered || lockedState) {
+  const handleStartTrial = async (roundId: number) => {
+    if (!token || testType !== 'TRIAL') {
       return;
     }
 
-    setAnswers((prev) => ({
-      ...prev,
-      [activeQuestion.id]: index,
-    }));
+    setIsGenerating(roundId);
+    setApiError(null);
+
+    try {
+      const data = await generateStudentTest(token, {
+        type: 'TRIAL',
+        round: roundId,
+      });
+      setTestData(data);
+      setCurrentQuestionIndex(0);
+      setSelectedAnswers({});
+      setRevealedAnswers({});
+      setSubmitResult(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Ошибка генерации теста';
+      setApiError(message);
+    } finally {
+      setIsGenerating(null);
+    }
   };
 
-  const handleNextQuestion = () => {
-    if (!testData || !isCurrentAnswered || isLastQuestion) {
+  const handleAnswerSelect = async (selectedIndex: number) => {
+    if (!token || !testData || !currentQuestion || !testType || isAnswering || currentReveal) {
       return;
     }
 
-    setCurrentQuestionIndex((prev) => prev + 1);
+    setIsAnswering(true);
+    setApiError(null);
+
+    try {
+      const reveal = await answerStudentQuestion(token, {
+        test_session_id: testData.test_session_id,
+        type: testType,
+        question_id: currentQuestion.id,
+        selected_index: selectedIndex,
+      });
+
+      setSelectedAnswers((previous) => ({
+        ...previous,
+        [currentQuestion.id]: selectedIndex,
+      }));
+      setRevealedAnswers((previous) => ({
+        ...previous,
+        [currentQuestion.id]: reveal,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Ошибка проверки ответа';
+      setApiError(message);
+    } finally {
+      setIsAnswering(false);
+    }
   };
 
   const handleSubmit = async () => {
-    if (!testData || !testType) {
+    if (!token || !testData || !testType) {
       return;
     }
 
-    setApiError(null);
     setIsSubmitting(true);
+    setApiError(null);
 
     try {
-      const result = await submitCurrentTest();
+      const result = await submitStudentTest(token, {
+        test_session_id: testData.test_session_id,
+        type: testType,
+      });
       setSubmitResult(result);
-      setFinalTermination(null);
-      setPhase('finished');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Ошибка отправки результатов';
+      const message = error instanceof Error ? error.message : 'Ошибка отправки результата';
       setApiError(message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleRetryViolationSubmit = () => {
-    if (!lockedState) {
-      return;
-    }
-
-    const termination = lockedState.termination;
-    setLockedState({
-      termination,
-      isSubmitting: true,
-      submitError: null,
-    });
-
-    void submitViolation(termination);
-  };
-
   if (loading) {
-    return <div className="p-10 text-center">Загрузка...</div>;
+    return (
+      <div className="min-h-screen bg-slate-50 px-4 py-10">
+        <div className="mx-auto max-w-4xl rounded-[28px] border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-[0_18px_55px_-28px_rgba(15,23,42,0.35)]">
+          Загружаем ветку теста...
+        </div>
+      </div>
+    );
   }
 
-  if (apiError && phase === 'setup' && !testData && !submitResult) {
+  if (apiError && !testData && !submitResult && !activeNode) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-lg w-full rounded-xl border border-red-200 bg-red-50 p-6 text-red-700">
+      <div className="min-h-screen bg-slate-50 px-4 py-10">
+        <div className="mx-auto max-w-2xl rounded-[28px] border border-red-200 bg-red-50 p-8 text-red-700 shadow-[0_18px_55px_-28px_rgba(15,23,42,0.25)]">
           {apiError}
         </div>
       </div>
     );
   }
 
-  if (phase === 'finished' && submitResult) {
-    const violationFinished = finalTermination?.mode === 'violation';
-
+  if (submitResult) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-sm text-center max-w-md w-full">
-          <h2 className={`text-2xl font-bold mb-4 ${violationFinished ? 'text-amber-600' : 'text-green-600'}`}>
-            {violationFinished ? 'Тест завершен автоматически' : 'Тест завершен'}
+      <div className="min-h-screen bg-[linear-gradient(180deg,_#ecfdf5_0%,_#f8fafc_38%,_#eef2ff_100%)] px-4 py-10">
+        <div className="mx-auto max-w-xl rounded-[32px] border border-emerald-200 bg-white p-8 text-center shadow-[0_22px_65px_-38px_rgba(15,23,42,0.4)]">
+          <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+            <CheckCircle2 className="h-8 w-8" />
+          </div>
+          <h2 className="mt-6 text-3xl font-semibold text-slate-950">
+            {localizeUi(student?.language, 'Тест завершён', 'Тест аяктады')}
           </h2>
-          {violationFinished && finalTermination && (
-            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4">
-              Причина: {finalTermination.reason}
-            </p>
-          )}
-          <p className="text-gray-600">Правильных ответов: {submitResult.correct} из {submitResult.total}</p>
-          <p className="text-gray-600 mt-1">Отвечено: {submitResult.answered}</p>
-          <p className="text-gray-600 mt-1">Ваш результат: {submitResult.score}%</p>
-          <button
-            onClick={() => {
-              void returnToDashboard();
-            }}
-            className="w-full mt-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium"
-          >
-            Вернуться на главную
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (phase === 'setup' || !testData) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-sm max-w-md w-full">
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">{setupLabel}</h2>
-            <button
-              onClick={() => {
-                void returnToDashboard();
-              }}
-              className="shrink-0 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Назад
-            </button>
-          </div>
-
-          {testType === 'MAIN' && (
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Выберите предмет</label>
-              <select
-                value={selectedSubject}
-                onChange={(event) => setSelectedSubject(event.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {(availableData?.subjects || []).map((subject) => (
-                  <option key={subject.id} value={subject.id}>
-                    {subject.name}
-                  </option>
-                ))}
-              </select>
-              {availableData?.main_test && (
-                <p className="mt-2 text-xs text-gray-500">
-                  Программа: {availableData.main_test.grades[0]}-{availableData.main_test.grades[1]} класс,
-                  всего {availableData.main_test.total_questions} вопросов
-                </p>
-              )}
-            </div>
-          )}
-
-          {testType === 'TRIAL' && (
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Выберите тур</label>
-              <select
-                value={selectedRound}
-                onChange={(event) => setSelectedRound(Number(event.target.value))}
-                className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {(availableData?.rounds || []).map((round) => (
-                  <option key={round.id} value={round.id}>
-                    {round.title} ({round.total_questions} вопросов)
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {apiError && (
-            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {apiError}
-            </div>
-          )}
-
-          <button
-            onClick={handleStart}
-            disabled={isGenerating}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl font-medium"
-          >
-            {isGenerating ? 'Подготовка теста...' : 'Начать тестирование'}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!activeQuestion) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-lg w-full rounded-xl border border-red-200 bg-white p-6 text-center">
-          <p className="text-red-700 mb-4">Не удалось загрузить текущий вопрос.</p>
-          <button
-            onClick={() => {
-              void returnToDashboard();
-            }}
-            className="rounded-lg bg-blue-600 px-5 py-2.5 text-white font-medium hover:bg-blue-700"
-          >
-            Вернуться на главную
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8" {...containerProps}>
-      {lockedState ? (
-        <div className="max-w-2xl mx-auto min-h-[70vh] flex items-center justify-center">
-          <div className="w-full rounded-2xl border border-amber-200 bg-white p-8 shadow-sm text-center">
-            <h2 className="text-2xl font-bold text-amber-700 mb-3">Тест заблокирован</h2>
-            <p className="text-gray-700">{lockedState.termination.reason}</p>
-
-            {lockedState.isSubmitting ? (
-              <p className="mt-6 text-sm text-gray-500">
-                Результаты автоматически отправляются. Пожалуйста, не закрывайте страницу.
-              </p>
-            ) : (
-              <>
-                <p className="mt-6 text-sm text-red-600">{lockedState.submitError}</p>
-                <div className="mt-6 flex flex-col gap-3">
-                  <button
-                    onClick={handleRetryViolationSubmit}
-                    className="w-full rounded-xl bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700"
-                  >
-                    Повторить отправку
-                  </button>
-                  <button
-                    onClick={() => {
-                      void returnToDashboard();
-                    }}
-                    className="w-full rounded-xl border border-gray-300 px-5 py-3 font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    Выйти без сохранения
-                  </button>
-                </div>
-              </>
+          <p className="mt-3 text-slate-600">
+            {localizeUi(
+              student?.language,
+              `Правильных ответов: ${submitResult.correct} из ${submitResult.total}`,
+              `Туура жооптор: ${submitResult.correct} / ${submitResult.total}`,
             )}
-          </div>
+          </p>
+          <p className="mt-2 text-lg font-semibold text-slate-900">
+            {localizeUi(student?.language, `Итоговый результат: ${submitResult.score}%`, `Жыйынтык упай: ${submitResult.score}%`)}
+          </p>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="mt-8 inline-flex h-12 items-center justify-center rounded-full bg-slate-950 px-6 text-sm font-medium text-white transition-colors hover:bg-slate-800"
+          >
+            {localizeUi(student?.language, 'Вернуться на главную', 'Башкы бетке кайтуу')}
+          </button>
         </div>
-      ) : (
-        <>
-          <header className="max-w-4xl mx-auto flex justify-between items-center mb-8 gap-4">
-            <div>
-              <h1 className="text-xl font-bold text-gray-800">
-                {testData.test_info.type === 'MAIN'
-                  ? student?.language === 'kg'
-                    ? 'Предметтик тест'
-                    : 'Предметный тест'
-                  : 'Пробный тест'}
-              </h1>
-              <p className="text-gray-500 text-sm mt-1">
-                Вопрос {currentQuestionIndex + 1} из {totalQuestions}
-              </p>
-            </div>
-            <div className="flex bg-white px-4 py-2 rounded-full border border-gray-200 shadow-sm font-mono text-blue-600 font-medium">
-              {answeredCount}/{totalQuestions}
+      </div>
+    );
+  }
+
+  if (!testData) {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.12),_transparent_24%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_100%)] px-4 py-8">
+        <div className="mx-auto max-w-5xl">
+          <header className="mb-8 rounded-[28px] border border-slate-200 bg-white/90 p-6 shadow-[0_18px_55px_-28px_rgba(15,23,42,0.35)] backdrop-blur">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-950"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  {localizeUi(student?.language, 'К выбору типа теста', 'Тест тандоого кайтуу')}
+                </button>
+                <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">
+                  {activeNode?.title || localizeUi(student?.language, 'Тест', 'Тест')}
+                </h1>
+                <p className="mt-2 text-sm text-slate-600">
+                  {availableData?.branch.title}. {localizeUi(
+                    student?.language,
+                    'Путь и порядок полностью соответствуют дереву навигации.',
+                    'Жол жана тартип толугу менен навигация дарагына ылайык.',
+                  )}
+                </p>
+              </div>
+
+              <div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">
+                {availableData?.branch.language_title}
+              </div>
             </div>
           </header>
 
-          <div className="max-w-4xl mx-auto mb-6">
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${((currentQuestionIndex + 1) / totalQuestions) * 100}%` }}
-              />
-            </div>
-          </div>
-
           {apiError && (
-            <div className="max-w-4xl mx-auto mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
               {apiError}
             </div>
           )}
 
-          <main className="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            {activeQuestion.topic && (
-              <div className="px-6 md:px-10 pt-4">
-                <span className="inline-block px-3 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-full border border-blue-200">
-                  {activeQuestion.topic}
-                </span>
-              </div>
-            )}
+          {testType === 'MAIN' && activeNode && 'items' in activeNode && (
+            <div className="grid gap-5">
+              {activeNode.items.map((item) => {
+                const isReady = item.status === 'ready';
+                const isBusy = isGenerating === item.id;
 
-            {activeQuestion.imageUrl && (
-              <div className="px-6 md:px-10 pt-4">
-                <img
-                  src={activeQuestion.imageUrl}
-                  alt="Иллюстрация к вопросу"
-                  className="max-h-64 h-auto w-auto max-w-full rounded-xl border border-gray-200 object-contain"
-                />
-              </div>
-            )}
+                return (
+                  <article
+                    key={item.id}
+                    className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_55px_-30px_rgba(15,23,42,0.28)]"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h2 className="text-2xl font-semibold text-slate-950">{item.title}</h2>
+                          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+                            isReady ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                          }`}>
+                            {isReady ? <CheckCircle2 className="h-3.5 w-3.5" /> : <LockKeyhole className="h-3.5 w-3.5" />}
+                            {isReady
+                              ? localizeUi(student?.language, 'Ветка готова', 'Бутак даяр')
+                              : localizeUi(student?.language, 'Пока недоступно', 'Азырынча жеткиликсиз')}
+                          </span>
+                        </div>
 
-            <div className="p-6 md:p-10 border-b border-gray-100">
-              <h3 className="text-lg md:text-xl text-gray-900 leading-relaxed font-medium">
-                {activeQuestion.text}
-              </h3>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {item.lines.map((line) => (
+                            <div
+                              key={line.grade}
+                              className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700"
+                            >
+                              <div className="font-medium text-slate-900">{line.label}</div>
+                              <div className="mt-1 text-slate-500">
+                                {localizeUi(student?.language, 'Сейчас', 'Азыр')} {line.available} / {line.required}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="w-full max-w-sm rounded-[24px] border border-slate-200 bg-slate-50/90 p-4 lg:w-80">
+                        <div className="text-sm text-slate-600">
+                          {localizeUi(
+                            student?.language,
+                            'Нужно 125 + 125, сейчас',
+                            '125 + 125 керек, азыр',
+                          )}{' '}
+                          <span className="font-semibold text-slate-950">
+                            {item.lines.map((line) => line.available).join(' + ')}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleStartMain(item.id)}
+                          disabled={!isReady || isBusy}
+                          className={`mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-medium transition-colors ${
+                            isReady
+                              ? 'bg-slate-950 text-white hover:bg-slate-800'
+                              : 'cursor-not-allowed bg-slate-200 text-slate-500'
+                          }`}
+                        >
+                          {isBusy ? (
+                            <>
+                              <Clock3 className="h-4 w-4 animate-spin" />
+                              {localizeUi(student?.language, 'Генерируем', 'Түзүп жатабыз')}
+                            </>
+                          ) : (
+                            <>
+                              <Play className="h-4 w-4" />
+                              {isReady
+                                ? localizeUi(student?.language, 'Начать предметный тест', 'Предметтик тестти баштоо')
+                                : localizeUi(student?.language, 'Ожидает заполнения', 'Толтурууну күтүп турат')}
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+
+          {testType === 'TRIAL' && activeNode && 'rounds' in activeNode && (
+            <div className="grid gap-5">
+              {activeNode.rounds.map((round) => {
+                const isReady = round.status === 'ready';
+                const isBusy = isGenerating === round.id;
+
+                return (
+                  <article
+                    key={round.id}
+                    className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_55px_-30px_rgba(15,23,42,0.28)]"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-5">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h2 className="text-2xl font-semibold text-slate-950">{round.title}</h2>
+                          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+                            isReady ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                          }`}>
+                            {isReady ? <CheckCircle2 className="h-3.5 w-3.5" /> : <LockKeyhole className="h-3.5 w-3.5" />}
+                            {isReady
+                              ? localizeUi(student?.language, 'Тур готов', 'Тур даяр')
+                              : localizeUi(student?.language, 'Тур закрыт', 'Тур жабык')}
+                          </span>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                          {round.subjects.map((subjectItem) => (
+                            <div
+                              key={subjectItem.id}
+                              className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4"
+                            >
+                              <div className="text-sm font-semibold text-slate-900">{subjectItem.title}</div>
+                              <div className="mt-3 space-y-2 text-sm text-slate-600">
+                                {subjectItem.lines.map((line) => (
+                                  <div
+                                    key={`${subjectItem.id}-${line.grade}`}
+                                    className="rounded-2xl border border-slate-200 bg-white px-3 py-2"
+                                  >
+                                    <div className="font-medium text-slate-900">{line.label}</div>
+                                    <div className="mt-1 text-slate-500">
+                                      {localizeUi(student?.language, 'Сейчас', 'Азыр')} {line.available} / {line.required}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="w-full max-w-sm rounded-[24px] border border-slate-200 bg-slate-50/90 p-4 lg:w-80">
+                        <div className="text-sm text-slate-600">
+                          {localizeUi(student?.language, 'Нужно по веткам, сейчас готово', 'Бутактар боюнча керек, азыр даяр')}{' '}
+                          <span className="font-semibold text-slate-950">{round.available_total}</span> / {round.required_total}
+                        </div>
+                        <button
+                          onClick={() => handleStartTrial(round.id)}
+                          disabled={!isReady || isBusy}
+                          className={`mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-medium transition-colors ${
+                            isReady
+                              ? 'bg-slate-950 text-white hover:bg-slate-800'
+                              : 'cursor-not-allowed bg-slate-200 text-slate-500'
+                          }`}
+                        >
+                          {isBusy ? (
+                            <>
+                              <Clock3 className="h-4 w-4 animate-spin" />
+                              {localizeUi(student?.language, 'Генерируем', 'Түзүп жатабыз')}
+                            </>
+                          ) : (
+                            <>
+                              <Play className="h-4 w-4" />
+                              {isReady
+                                ? localizeUi(student?.language, 'Начать пробный тест', 'Пробный тестти баштоо')
+                                : localizeUi(student?.language, 'Ожидает заполнения', 'Толтурууну күтүп турат')}
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const totalQuestions = testData.questions.length;
+  const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
+
+  return (
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.12),_transparent_20%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_100%)] px-4 py-8">
+      <div className="mx-auto max-w-5xl">
+        <header className="mb-6 rounded-[28px] border border-slate-200 bg-white/90 p-6 shadow-[0_18px_55px_-28px_rgba(15,23,42,0.35)] backdrop-blur">
+          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">
+                <Sparkles className="h-3.5 w-3.5" />
+                {availableData?.branch.title}
+              </div>
+              <h1 className="mt-4 text-3xl font-semibold text-slate-950">
+                {activeNode?.title || localizeUi(student?.language, 'Тест', 'Тест')}
+              </h1>
+              <p className="mt-2 text-sm text-slate-600">
+                {localizeUi(student?.language, 'Вопрос', 'Суроо')} {currentQuestionIndex + 1} / {totalQuestions}
+              </p>
             </div>
 
-            <div className="p-6 md:p-10 bg-gray-50/50">
-              <div className="flex flex-col gap-3">
-                {activeQuestion.options.map((option, index) => {
-                  const isSelected = selectedAnswer === index;
-                  const optionClass = isSelected
-                    ? 'border-blue-500 bg-blue-50 text-blue-800 ring-1 ring-blue-500'
-                    : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-gray-50';
+            <div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700">
+              {getProgressLabel(answeredCount, totalQuestions, student?.language)}
+            </div>
+          </div>
+        </header>
 
-                  return (
-                    <button
-                      key={index}
-                      onClick={() => handleAnswerSelect(index)}
-                      disabled={isCurrentAnswered}
-                      className={`w-full text-left p-4 rounded-xl border transition-all ${optionClass} ${
-                        isCurrentAnswered ? 'cursor-default' : ''
-                      }`}
-                    >
-                      <span
-                        className={`inline-block w-8 h-8 text-center leading-8 rounded-full border mr-4 font-medium text-sm ${
-                          isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-white'
-                        }`}
-                      >
-                        {String.fromCharCode(65 + index)}
-                      </span>
-                      {option.text}
-                    </button>
-                  );
-                })}
+        <div className="mb-6 overflow-hidden rounded-full bg-slate-200">
+          <div
+            className="h-2 rounded-full bg-slate-950 transition-all duration-300"
+            style={{ width: `${((currentQuestionIndex + 1) / totalQuestions) * 100}%` }}
+          />
+        </div>
+
+        {apiError && (
+          <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
+            {apiError}
+          </div>
+        )}
+
+        <main className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_22px_65px_-38px_rgba(15,23,42,0.4)]">
+          {currentQuestion?.topic && (
+            <div className="border-b border-slate-100 px-6 pt-6 md:px-10">
+              <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+                {currentQuestion.topic}
+              </span>
+            </div>
+          )}
+
+          {currentQuestion?.imageUrl && (
+            <div className="border-b border-slate-100 px-6 pt-6 md:px-10">
+              <img
+                src={currentQuestion.imageUrl}
+                alt={localizeUi(student?.language, 'Иллюстрация к вопросу', 'Суроого сүрөт')}
+                className="max-h-72 w-auto max-w-full rounded-3xl border border-slate-200 object-contain"
+              />
+            </div>
+          )}
+
+          <div className="border-b border-slate-100 px-6 py-8 md:px-10">
+            <h2 className="text-xl font-medium leading-relaxed text-slate-950 md:text-2xl">
+              {currentQuestion?.text}
+            </h2>
+          </div>
+
+          <div className="bg-slate-50/70 px-6 py-6 md:px-10">
+            <div className="grid gap-3">
+              {currentQuestion?.options.map((option, index) => {
+                const isSelected = currentSelectedIndex === index;
+                const isCorrect = currentReveal?.correct_index === index;
+                const isAnswered = Boolean(currentReveal);
+
+                let optionClassName = 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50';
+                let badgeClassName = 'border-slate-200 bg-white text-slate-600';
+
+                if (isAnswered) {
+                  if (isCorrect) {
+                    optionClassName = 'border-emerald-300 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200';
+                    badgeClassName = 'border-emerald-500 bg-emerald-500 text-white';
+                  } else if (isSelected) {
+                    optionClassName = 'border-rose-300 bg-rose-50 text-rose-900 ring-1 ring-rose-200';
+                    badgeClassName = 'border-rose-500 bg-rose-500 text-white';
+                  } else {
+                    optionClassName = 'border-slate-200 bg-slate-50 text-slate-400';
+                    badgeClassName = 'border-slate-200 bg-slate-50 text-slate-400';
+                  }
+                } else if (isSelected) {
+                  optionClassName = 'border-slate-900 bg-slate-50 text-slate-950 ring-1 ring-slate-900/10';
+                  badgeClassName = 'border-slate-900 bg-slate-900 text-white';
+                }
+
+                return (
+                  <button
+                    key={`${currentQuestion.id}-${index}`}
+                    onClick={() => handleAnswerSelect(index)}
+                    disabled={isAnswering || isAnswered}
+                    className={`flex w-full items-start gap-4 rounded-[24px] border p-4 text-left transition-colors ${optionClassName}`}
+                  >
+                    <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${badgeClassName}`}>
+                      {String.fromCharCode(65 + index)}
+                    </span>
+                    <span className="pt-1 text-sm leading-6 md:text-base">{option.text}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {currentReveal && (
+            <div className={`border-t px-6 py-6 md:px-10 ${
+              currentReveal.is_correct
+                ? 'border-emerald-200 bg-emerald-50/70'
+                : 'border-amber-200 bg-amber-50/70'
+            }`}>
+              <div className="flex items-center gap-3">
+                {currentReveal.is_correct ? (
+                  <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                ) : (
+                  <XCircle className="h-6 w-6 text-rose-600" />
+                )}
+                <div className={`text-sm font-semibold ${
+                  currentReveal.is_correct ? 'text-emerald-700' : 'text-rose-700'
+                }`}>
+                  {currentReveal.is_correct
+                    ? localizeUi(student?.language, 'Правильно', 'Туура')
+                    : localizeUi(student?.language, 'Неправильно', 'Туура эмес')}
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2 text-sm leading-6 text-slate-700">
+                <p>
+                  <span className="font-semibold text-slate-950">
+                    {localizeUi(student?.language, 'Правильный вариант:', 'Туура вариант:')}{' '}
+                  </span>
+                  {String.fromCharCode(65 + currentReveal.correct_index)}
+                </p>
+
+                {currentReveal.explanation ? (
+                  <p>
+                    <span className="font-semibold text-slate-950">
+                      {localizeUi(student?.language, 'Объяснение:', 'Түшүндүрмө:')}{' '}
+                    </span>
+                    {currentReveal.explanation}
+                  </p>
+                ) : null}
               </div>
             </div>
+          )}
 
-            <div className="p-6 md:p-10 border-t border-gray-100 flex justify-end items-center bg-white">
-              {isCurrentAnswered && !isLastQuestion && (
+          <div className="flex flex-col gap-3 border-t border-slate-100 bg-white px-6 py-5 md:flex-row md:items-center md:justify-between md:px-10">
+            <div className="text-sm text-slate-500">
+              {currentReveal
+                ? localizeUi(student?.language, 'Ответ зафиксирован, можно переходить дальше.', 'Жооп бекитилди, кийинкиге өтсөңүз болот.')
+                : isAnswering
+                  ? localizeUi(student?.language, 'Проверяем ответ...', 'Жоопту текшерип жатабыз...')
+                  : localizeUi(student?.language, 'Выберите вариант, чтобы открыть разбор.', 'Түшүндүрмөнү ачуу үчүн вариант тандаңыз.')}
+            </div>
+
+            <div className="flex items-center gap-3">
+              {!isLastQuestion && (
                 <button
-                  onClick={handleNextQuestion}
-                  className="px-8 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm"
+                  onClick={() => setCurrentQuestionIndex((previous) => previous + 1)}
+                  disabled={!currentReveal}
+                  className={`inline-flex h-12 items-center justify-center gap-2 rounded-full px-5 text-sm font-medium transition-colors ${
+                    currentReveal
+                      ? 'bg-slate-950 text-white hover:bg-slate-800'
+                      : 'cursor-not-allowed bg-slate-200 text-slate-500'
+                  }`}
                 >
-                  Следующий вопрос
+                  {localizeUi(student?.language, 'Следующий вопрос', 'Кийинки суроо')}
+                  <ArrowRight className="h-4 w-4" />
                 </button>
               )}
 
-              {isCurrentAnswered && isLastQuestion && (
+              {isLastQuestion && (
                 <button
                   onClick={handleSubmit}
-                  disabled={isSubmitting}
-                  className="px-8 py-2.5 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-60"
+                  disabled={!currentReveal || isSubmitting}
+                  className={`inline-flex h-12 items-center justify-center gap-2 rounded-full px-5 text-sm font-medium transition-colors ${
+                    currentReveal && !isSubmitting
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'cursor-not-allowed bg-slate-200 text-slate-500'
+                  }`}
                 >
-                  {isSubmitting ? 'Отправка...' : 'Завершить тест'}
+                  {isSubmitting
+                    ? localizeUi(student?.language, 'Отправляем', 'Жөнөтүп жатабыз')
+                    : localizeUi(student?.language, 'Завершить тест', 'Тестти аяктоо')}
                 </button>
               )}
-
-              {!isCurrentAnswered && (
-                <p className="text-gray-400 text-sm italic">Выберите ответ, чтобы продолжить</p>
-              )}
             </div>
-          </main>
-        </>
-      )}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ const multer = require('multer');
 const router = express.Router();
 const supabase = require('../lib/supabase');
 const { signAdminToken, verifyAdminToken } = require('../lib/adminAuth');
+const { loadQuestionCounts, buildContentReadiness } = require('../lib/testCatalog');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -491,6 +492,18 @@ router.get('/stats', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Admin stats error:', error);
     return res.status(500).json({ error: 'Failed to fetch admin stats' });
+  }
+});
+
+router.get('/content-readiness', requireAdmin, async (req, res) => {
+  try {
+    const countsByTable = await loadQuestionCounts(supabase);
+    return res.json({
+      branches: buildContentReadiness(countsByTable),
+    });
+  } catch (error) {
+    console.error('Content readiness error:', error);
+    return res.status(500).json({ error: 'Failed to fetch content readiness' });
   }
 });
 

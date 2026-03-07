@@ -17,35 +17,67 @@ export interface StudentLoginResponse {
   student: StudentAuthUser;
 }
 
-export interface AvailableSubject {
-  id: string;
-  name: string;
+export interface TreeLine {
+  grade: number;
+  required: number;
+  available: number;
+  label: string;
 }
 
-export interface AvailableRoundSubject {
+export interface MainTreeItem {
   id: string;
-  name: string;
-  counts: Record<string, number>;
-  total: number;
+  title: string;
+  required_total: number;
+  available_total: number;
+  status: 'ready' | 'locked';
+  lines: TreeLine[];
 }
 
-export interface AvailableRound {
+export interface TrialTreeSubject {
+  id: string;
+  title: string;
+  display_name: string;
+  required_total: number;
+  available_total: number;
+  status: 'ready' | 'locked';
+  lines: TreeLine[];
+}
+
+export interface TrialTreeRound {
   id: number;
   title: string;
-  total_questions: number;
-  subjects: AvailableRoundSubject[];
+  required_total: number;
+  available_total: number;
+  status: 'ready' | 'locked';
+  subjects: TrialTreeSubject[];
+}
+
+export interface BranchInfo {
+  grade: number;
+  language: 'ru' | 'kg';
+  title: string;
+  class_title: string;
+  language_title: string;
+}
+
+export interface AvailableMainNode {
+  id: 'MAIN';
+  title: string;
+  status: 'ready' | 'locked';
+  items: MainTreeItem[];
+}
+
+export interface AvailableTrialNode {
+  id: 'TRIAL';
+  title: string;
+  status: 'ready' | 'locked';
+  rounds: TrialTreeRound[];
 }
 
 export interface AvailableResponse {
   student: StudentAuthUser;
-  test_types: Array<{ id: 'MAIN' | 'TRIAL'; title: string }>;
-  subjects: AvailableSubject[];
-  rounds: AvailableRound[];
-  main_test: {
-    grades: [number, number];
-    questions_per_grade: number;
-    total_questions: number;
-  };
+  branch: BranchInfo;
+  test_types: [AvailableMainNode, AvailableTrialNode];
 }
 
 export interface GeneratedQuestion {
@@ -71,6 +103,15 @@ export interface GeneratedTestResponse {
   questions: GeneratedQuestion[];
 }
 
+export interface AnswerQuestionResponse {
+  is_correct: boolean;
+  correct_index: number;
+  explanation: string;
+  can_continue: boolean;
+  answered_count: number;
+  total_questions: number;
+}
+
 export interface SubmitTestResponse {
   message: string;
   score: number;
@@ -80,30 +121,12 @@ export interface SubmitTestResponse {
 }
 
 type RequestMethod = 'GET' | 'POST';
-type TerminationMode = 'normal' | 'violation';
-type TerminationSource =
-  | 'blur'
-  | 'visibilitychange'
-  | 'fullscreen_exit'
-  | 'printscreen'
-  | 'blocked_shortcut'
-  | 'copy'
-  | 'contextmenu'
-  | 'navigation';
-
-export interface TerminationPayload {
-  mode: TerminationMode;
-  reason: string;
-  source: TerminationSource;
-  triggered_at: string;
-}
 
 async function request<T>(
   path: string,
   method: RequestMethod,
   payload?: unknown,
   token?: string,
-  options?: Pick<RequestInit, 'keepalive'>,
 ): Promise<T> {
   const headers = new Headers();
   headers.set('Content-Type', 'application/json');
@@ -116,7 +139,6 @@ async function request<T>(
     method,
     headers,
     body: payload === undefined ? undefined : JSON.stringify(payload),
-    keepalive: options?.keepalive,
   });
 
   const raw = await response.text();
@@ -158,15 +180,24 @@ export function generateStudentTest(
   return request<GeneratedTestResponse>('/tests/generate', 'POST', payload, token);
 }
 
+export function answerStudentQuestion(
+  token: string,
+  payload: {
+    test_session_id: string;
+    type: 'MAIN' | 'TRIAL';
+    question_id: string;
+    selected_index: number;
+  },
+) {
+  return request<AnswerQuestionResponse>('/tests/answer', 'POST', payload, token);
+}
+
 export function submitStudentTest(
   token: string,
   payload: {
     test_session_id: string;
     type: 'MAIN' | 'TRIAL';
-    answers: Record<string, number>;
-    termination?: TerminationPayload;
   },
-  options?: Pick<RequestInit, 'keepalive'>,
 ) {
-  return request<SubmitTestResponse>('/tests/submit', 'POST', payload, token, options);
+  return request<SubmitTestResponse>('/tests/submit', 'POST', payload, token);
 }

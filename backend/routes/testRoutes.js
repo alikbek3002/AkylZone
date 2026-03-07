@@ -1,55 +1,20 @@
 const express = require('express');
 const supabase = require('../lib/supabase');
 const { hashPassword, signStudentToken, verifyStudentToken } = require('../lib/studentAuth');
+const {
+  SUBJECTS,
+  LANGUAGES,
+  STUDENT_GRADES,
+  TEST_TYPES,
+  normalizeLanguage,
+  localizeText,
+  buildQuestionTableName,
+  buildResultTableName,
+  loadQuestionCounts,
+  buildStudentCatalog,
+} = require('../lib/testCatalog');
 
 const router = express.Router();
-
-const SUBJECTS = ['math', 'logic', 'history', 'english', 'russian', 'kyrgyz'];
-const LANGUAGES = ['ru', 'kg'];
-const STUDENT_GRADES = [6, 7];
-const MAIN_QUESTIONS_PER_GRADE = 125;
-const TEST_TYPES = ['MAIN', 'TRIAL'];
-const TERMINATION_MODES = ['normal', 'violation'];
-const TERMINATION_SOURCES = [
-  'blur',
-  'visibilitychange',
-  'fullscreen_exit',
-  'printscreen',
-  'blocked_shortcut',
-  'copy',
-  'contextmenu',
-  'navigation',
-];
-
-const subjectsList = [
-  { id: 'math', name_ru: 'Математика', name_kg: 'Математика' },
-  { id: 'logic', name_ru: 'Логика', name_kg: 'Логика' },
-  { id: 'history', name_ru: 'История', name_kg: 'Тарых' },
-  { id: 'english', name_ru: 'Английский язык', name_kg: 'Англис тили' },
-  { id: 'russian', name_ru: 'Русский язык', name_kg: 'Орус тили' },
-  { id: 'kyrgyz', name_ru: 'Кыргызский язык', name_kg: 'Кыргыз тили' },
-];
-
-// From site-navigation-tree.md
-const TRIAL_STRUCTURE = {
-  1: { // 1-2 тур (80)
-    math: { prev: 12, curr: 13 },
-    logic: { prev: 7, curr: 8 },
-    kyrgyz: { prev: 7, curr: 8 },
-    russian: { prev: 7, curr: 8 },
-    history: { prev: 5, curr: 5 },
-  },
-  3: { // 3 тур (80)
-    math: { prev: 12, curr: 13 },
-    logic: { prev: 7, curr: 8 },
-    kyrgyz: { prev: 10, curr: 10 },
-    english: { prev: 10, curr: 10 },
-  },
-};
-
-function normalizeLanguage(language) {
-  return String(language || '').trim().toLowerCase();
-}
 
 function parseBearerToken(headerValue) {
   if (!headerValue) {
@@ -77,23 +42,11 @@ function toStudentResponse(student, token) {
   };
 }
 
-function localizeText(language, ruText, kgText) {
-  return language === 'kg' ? kgText : ruText;
-}
-
-function buildQuestionTableName(subject, language, grade) {
-  return `questions_${subject}_${language}_${grade}`;
-}
-
-function buildResultTableName(type, language, grade) {
-  return `results_${type.toLowerCase()}_${language}_${grade}`;
-}
-
 function shuffle(array) {
   const result = [...array];
-  for (let i = result.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[randomIndex]] = [result[randomIndex], result[index]];
   }
   return result;
 }
@@ -108,48 +61,24 @@ function sanitizeOptionsForStudent(options) {
       return { text: option };
     }
 
-    return { text: String(option?.text || '') };
+    return {
+      text: String(option?.text || ''),
+    };
   });
 }
 
-function normalizeTerminationPayload(termination) {
-  if (!termination || typeof termination !== 'object') {
-    return null;
+function getCorrectOptionIndex(options) {
+  if (!Array.isArray(options)) {
+    return -1;
   }
 
-  const mode = String(termination.mode || '').trim().toLowerCase();
-  const reason = String(termination.reason || '').trim();
-  const source = String(termination.source || '').trim().toLowerCase();
-  const triggeredAt = String(termination.triggered_at || '').trim();
-
-  if (!TERMINATION_MODES.includes(mode)) {
-    return null;
-  }
-
-  if (!reason) {
-    return null;
-  }
-
-  if (!TERMINATION_SOURCES.includes(source)) {
-    return null;
-  }
-
-  if (!triggeredAt) {
-    return null;
-  }
-
-  return {
-    mode,
-    reason,
-    source,
-    triggered_at: triggeredAt,
-  };
+  return options.findIndex((option) => Boolean(option?.is_correct));
 }
 
 async function getStudentById(studentId) {
   const { data, error } = await supabase
     .from('students')
-    .select('id, full_name, grade, language, username, password_hash, plain_password')
+    .select('id, full_name, grade, language, username, password_hash, plain_password, active_session_token')
     .eq('id', studentId)
     .maybeSingle();
 
@@ -163,49 +92,28 @@ async function getStudentById(studentId) {
 async function authenticateStudent(req, res, next) {
   try {
     const token = parseBearerToken(req.headers.authorization);
-    let student = null;
+    const payload = verifyStudentToken(token);
 
-    if (token) {
-      const payload = verifyStudentToken(token);
-      if (!payload?.sub) {
-        return res.status(401).json({ error: 'Invalid or expired student token' });
-      }
+    if (!token || !payload?.sub) {
+      return res.status(401).json({ error: 'Invalid or expired student token' });
+    }
 
-      student = await getStudentById(payload.sub);
-      if (!student) {
-        return res.status(401).json({ error: 'Student not found for token' });
-      }
-    } else if (req.headers['x-student-id']) {
-      // Compatibility fallback for old clients.
-      student = await getStudentById(String(req.headers['x-student-id']));
-      if (!student) {
-        return res.status(401).json({ error: 'Invalid student id' });
-      }
-    } else {
-      return res.status(401).json({ error: 'Student authorization is required' });
+    const student = await getStudentById(payload.sub);
+    if (!student) {
+      return res.status(401).json({ error: 'Student not found for token' });
+    }
+
+    if (!student.active_session_token || student.active_session_token !== token) {
+      return res.status(401).json({ error: 'Student session is no longer active' });
     }
 
     req.student = student;
+    req.studentToken = token;
     return next();
   } catch (error) {
     console.error('Student auth error:', error);
     return res.status(500).json({ error: 'Failed to authenticate student' });
   }
-}
-
-function buildTrialSubjectsForRound(grade, language, round) {
-  const structure = TRIAL_STRUCTURE[round];
-  const prevGrade = grade - 1;
-
-  return Object.entries(structure).map(([subject, counts]) => ({
-    id: subject,
-    name: subjectsList.find((item) => item.id === subject)?.[`name_${language}`] || subject,
-    counts: {
-      [prevGrade]: counts.prev,
-      [grade]: counts.curr,
-    },
-    total: counts.prev + counts.curr,
-  }));
 }
 
 async function fetchRandomQuestionsStrict({ subject, language, grade, requiredCount }) {
@@ -238,7 +146,6 @@ async function fetchRandomQuestionsStrict({ subject, language, grade, requiredCo
     ...row,
     subject,
     grade,
-    tableName,
   }));
 }
 
@@ -257,11 +164,92 @@ function buildBreakdown(items) {
   return breakdown;
 }
 
-function getCorrectOptionIndex(options) {
-  if (!Array.isArray(options)) {
-    return -1;
+function getNotReadyError(language, details) {
+  return {
+    code: 'test_not_ready',
+    error: localizeText(
+      language,
+      'Этот тест пока недоступен — банк вопросов еще не заполнен.',
+      'Бул тест азыр жеткиликсиз — суроолор базасы толо элек.',
+    ),
+    details,
+  };
+}
+
+function getEmptyAnswersState() {
+  return {
+    by_question: {},
+    answered_count: 0,
+    correct_count: 0,
+    total_questions: 0,
+    score_percent: 0,
+    submitted_at: null,
+  };
+}
+
+function getAnswersState(rawAnswers) {
+  const baseState = getEmptyAnswersState();
+  if (!rawAnswers || typeof rawAnswers !== 'object' || Array.isArray(rawAnswers)) {
+    return baseState;
   }
-  return options.findIndex((option) => Boolean(option?.is_correct));
+
+  return {
+    ...baseState,
+    ...rawAnswers,
+    by_question:
+      rawAnswers.by_question && typeof rawAnswers.by_question === 'object' && !Array.isArray(rawAnswers.by_question)
+        ? rawAnswers.by_question
+        : {},
+  };
+}
+
+function buildMainLeafRequirements(leaf) {
+  return leaf.lines.map((line) => ({
+    grade: line.grade,
+    required: line.required,
+    available: line.available,
+    label: line.label,
+  }));
+}
+
+function buildTrialLeafRequirements(round) {
+  return round.subjects.map((subject) => ({
+    id: subject.id,
+    title: subject.title,
+    required_total: subject.required_total,
+    available_total: subject.available_total,
+    status: subject.status,
+    lines: subject.lines.map((line) => ({
+      grade: line.grade,
+      required: line.required,
+      available: line.available,
+      label: line.label,
+    })),
+  }));
+}
+
+async function loadSessionContext({ student, type, sessionId }) {
+  const normalizedType = String(type || '').trim().toUpperCase();
+  const language = normalizeLanguage(student.language);
+  const grade = student.grade;
+  const resultTable = buildResultTableName(normalizedType, language, grade);
+
+  const { data: sessionRow, error: sessionError } = await supabase
+    .from(resultTable)
+    .select('id, generated_questions, answers')
+    .eq('id', sessionId)
+    .eq('student_id', student.id)
+    .maybeSingle();
+
+  if (sessionError || !sessionRow) {
+    return null;
+  }
+
+  return { normalizedType, language, grade, resultTable, sessionRow };
+}
+
+function findSessionItem(items, questionId) {
+  return items.find((item) => String(item.id) === String(questionId)) || null;
 }
 
 router.post('/login', async (req, res) => {
@@ -302,10 +290,15 @@ router.post('/login', async (req, res) => {
       grade: student.grade,
     });
 
-    await supabase
+    const { error: updateError } = await supabase
       .from('students')
       .update({ active_session_token: token })
       .eq('id', student.id);
+
+    if (updateError) {
+      console.error('Failed to update active student session token:', updateError);
+      return res.status(500).json({ error: 'Ошибка входа ученика' });
+    }
 
     return res.json(toStudentResponse(student, token));
   } catch (error) {
@@ -316,56 +309,14 @@ router.post('/login', async (req, res) => {
 
 router.use(authenticateStudent);
 
-router.get('/available', (req, res) => {
-  const student = req.student;
-  const language = normalizeLanguage(student.language);
-  const grade = student.grade;
-  const prevGrade = grade - 1;
-
-  const subjects = subjectsList.map((subject) => ({
-    id: subject.id,
-    name: language === 'kg' ? subject.name_kg : subject.name_ru,
-  }));
-
-  return res.json({
-    student: {
-      id: student.id,
-      fullName: student.full_name,
-      grade,
-      language,
-      username: student.username,
-    },
-    test_types: [
-      {
-        id: 'MAIN',
-        title: localizeText(language, 'Предметный тест', 'Предметтик тест'),
-      },
-      {
-        id: 'TRIAL',
-        title: localizeText(language, 'Пробный тест', 'Пробный тест'),
-      },
-    ],
-    subjects,
-    rounds: [
-      {
-        id: 1,
-        title: localizeText(language, '1-2 тур', '1-2 тур'),
-        total_questions: 80,
-        subjects: buildTrialSubjectsForRound(grade, language, 1),
-      },
-      {
-        id: 3,
-        title: localizeText(language, '3 тур', '3 тур'),
-        total_questions: 80,
-        subjects: buildTrialSubjectsForRound(grade, language, 3),
-      },
-    ],
-    main_test: {
-      grades: [prevGrade, grade],
-      questions_per_grade: MAIN_QUESTIONS_PER_GRADE,
-      total_questions: MAIN_QUESTIONS_PER_GRADE * 2,
-    },
-  });
+router.get('/available', async (req, res) => {
+  try {
+    const countsByTable = await loadQuestionCounts(supabase);
+    return res.json(buildStudentCatalog(req.student, countsByTable));
+  } catch (error) {
+    console.error('Load student catalog error:', error);
+    return res.status(500).json({ error: 'Failed to load student navigation tree' });
+  }
 });
 
 router.post('/generate', async (req, res) => {
@@ -373,34 +324,74 @@ router.post('/generate', async (req, res) => {
     const { type, subject, round } = req.body || {};
     const normalizedType = String(type || '').trim().toUpperCase();
     const normalizedSubject = String(subject || '').trim().toLowerCase();
-    const selectedRound = Number(round) === 3 ? 3 : 1;
-
-    const studentGrade = req.student.grade;
-    const prevGrade = studentGrade - 1;
+    const selectedRound = Number(round);
     const language = normalizeLanguage(req.student.language);
+    const studentGrade = req.student.grade;
 
     if (!TEST_TYPES.includes(normalizedType)) {
       return res.status(400).json({ error: 'Invalid test type' });
     }
 
+    const countsByTable = await loadQuestionCounts(supabase);
+    const catalog = buildStudentCatalog(req.student, countsByTable);
+    const mainNode = catalog.test_types.find((node) => node.id === 'MAIN');
+    const trialNode = catalog.test_types.find((node) => node.id === 'TRIAL');
+
     const fetchPlan = [];
+    let blockedLeaf = null;
+
     if (normalizedType === 'MAIN') {
       if (!SUBJECTS.includes(normalizedSubject)) {
         return res.status(400).json({ error: 'Invalid subject for MAIN test' });
       }
 
-      fetchPlan.push(
-        { subject: normalizedSubject, grade: prevGrade, count: MAIN_QUESTIONS_PER_GRADE },
-        { subject: normalizedSubject, grade: studentGrade, count: MAIN_QUESTIONS_PER_GRADE },
-      );
-    } else {
-      const structure = TRIAL_STRUCTURE[selectedRound];
-      for (const [trialSubject, counts] of Object.entries(structure)) {
-        fetchPlan.push(
-          { subject: trialSubject, grade: prevGrade, count: counts.prev },
-          { subject: trialSubject, grade: studentGrade, count: counts.curr },
-        );
+      const leaf = mainNode?.items?.find((item) => item.id === normalizedSubject) || null;
+      if (!leaf || leaf.status !== 'ready') {
+        blockedLeaf = leaf || { id: normalizedSubject, status: 'locked', lines: [] };
+      } else {
+        for (const line of leaf.lines) {
+          fetchPlan.push({
+            subject: normalizedSubject,
+            grade: line.grade,
+            count: line.required,
+          });
+        }
       }
+    } else {
+      if (![1, 3].includes(selectedRound)) {
+        return res.status(400).json({ error: 'Invalid round for TRIAL test' });
+      }
+
+      const roundLeaf = trialNode?.rounds?.find((item) => item.id === selectedRound) || null;
+      if (!roundLeaf || roundLeaf.status !== 'ready') {
+        blockedLeaf = roundLeaf || { id: selectedRound, status: 'locked', subjects: [] };
+      } else {
+        for (const subjectLeaf of roundLeaf.subjects) {
+          for (const line of subjectLeaf.lines) {
+            fetchPlan.push({
+              subject: subjectLeaf.id,
+              grade: line.grade,
+              count: line.required,
+            });
+          }
+        }
+      }
+    }
+
+    if (blockedLeaf) {
+      return res.status(409).json(
+        getNotReadyError(language, normalizedType === 'MAIN'
+          ? {
+            type: normalizedType,
+            subject: normalizedSubject,
+            requirements: buildMainLeafRequirements(blockedLeaf),
+          }
+          : {
+            type: normalizedType,
+            round: selectedRound,
+            requirements: buildTrialLeafRequirements(blockedLeaf),
+          }),
+      );
     }
 
     const groupedQuestions = await Promise.all(
@@ -410,14 +401,13 @@ router.post('/generate', async (req, res) => {
           language,
           grade: planItem.grade,
           requiredCount: planItem.count,
-        }),
-      ),
+        })),
     );
 
     const questions = shuffle(groupedQuestions.flat());
     const breakdown = buildBreakdown(questions);
     const generatedMeta = {
-      schema_version: 2,
+      schema_version: 3,
       type: normalizedType,
       subject: normalizedType === 'MAIN' ? normalizedSubject : null,
       round: normalizedType === 'TRIAL' ? selectedRound : null,
@@ -434,7 +424,7 @@ router.post('/generate', async (req, res) => {
       .insert({
         student_id: req.student.id,
         generated_questions: generatedMeta,
-        answers: {},
+        answers: getEmptyAnswersState(),
         total_score: 0,
       })
       .select('id')
@@ -453,7 +443,7 @@ router.post('/generate', async (req, res) => {
         round: normalizedType === 'TRIAL' ? selectedRound : null,
         language,
         grade: studentGrade,
-        grade_window: [prevGrade, studentGrade],
+        grade_window: [studentGrade - 1, studentGrade],
       },
       breakdown,
       total_questions: questions.length,
@@ -467,10 +457,15 @@ router.post('/generate', async (req, res) => {
     });
   } catch (error) {
     if (error.code === 'NOT_ENOUGH_QUESTIONS') {
-      return res.status(400).json({
-        error: 'Недостаточно вопросов в базе для генерации теста',
-        details: error.meta,
-      });
+      return res.status(409).json(
+        getNotReadyError(normalizeLanguage(req.student.language), {
+          type: String(req.body?.type || '').trim().toUpperCase(),
+          reason: 'not_enough_questions',
+          tableName: error.meta?.tableName,
+          requiredCount: error.meta?.requiredCount,
+          availableCount: error.meta?.availableCount,
+        }),
+      );
     }
 
     console.error('Test generation error:', error);
@@ -478,41 +473,134 @@ router.post('/generate', async (req, res) => {
   }
 });
 
+router.post('/answer', async (req, res) => {
+  try {
+    const { test_session_id: sessionId, type, question_id: questionId, selected_index: selectedIndexRaw } = req.body || {};
+    const selectedIndex = Number(selectedIndexRaw);
+
+    if (!sessionId || !questionId || !TEST_TYPES.includes(String(type || '').trim().toUpperCase())) {
+      return res.status(400).json({ error: 'Invalid answer payload' });
+    }
+
+    if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
+      return res.status(400).json({ error: 'selected_index must be a non-negative integer' });
+    }
+
+    const sessionContext = await loadSessionContext({
+      student: req.student,
+      type,
+      sessionId,
+    });
+
+    if (!sessionContext) {
+      return res.status(404).json({ error: 'Test session not found' });
+    }
+
+    const { resultTable, sessionRow } = sessionContext;
+    const generatedMeta = sessionRow.generated_questions;
+    const items = Array.isArray(generatedMeta?.items) ? generatedMeta.items : [];
+    const sessionItem = findSessionItem(items, questionId);
+    if (!sessionItem) {
+      return res.status(404).json({ error: 'Question not found in this session' });
+    }
+
+    const answersState = getAnswersState(sessionRow.answers);
+    if (answersState.submitted_at) {
+      return res.status(409).json({ error: 'Test session is already submitted' });
+    }
+
+    if (answersState.by_question[String(questionId)]) {
+      return res.status(409).json({ error: 'Answer for this question is already locked' });
+    }
+
+    const tableName = buildQuestionTableName(sessionItem.subject, req.student.language, sessionItem.grade);
+    const { data: questionRow, error: questionError } = await supabase
+      .from(tableName)
+      .select('id, options, explanation')
+      .eq('id', questionId)
+      .maybeSingle();
+
+    if (questionError || !questionRow) {
+      console.error('Load single question for answer reveal failed:', questionError);
+      return res.status(500).json({ error: 'Failed to reveal answer' });
+    }
+
+    if (!Array.isArray(questionRow.options) || selectedIndex >= questionRow.options.length) {
+      return res.status(400).json({ error: 'selected_index is out of range for this question' });
+    }
+
+    const correctIndex = getCorrectOptionIndex(questionRow.options);
+    const isCorrect = correctIndex >= 0 && selectedIndex === correctIndex;
+    const nextAnswers = {
+      ...answersState,
+      by_question: {
+        ...answersState.by_question,
+        [String(questionId)]: {
+          selected_index: selectedIndex,
+          is_correct: isCorrect,
+          correct_index: correctIndex,
+          answered_at: new Date().toISOString(),
+        },
+      },
+    };
+
+    nextAnswers.answered_count = Object.keys(nextAnswers.by_question).length;
+    nextAnswers.correct_count = Object.values(nextAnswers.by_question).reduce(
+      (sum, answer) => sum + (answer.is_correct ? 1 : 0),
+      0,
+    );
+    nextAnswers.total_questions = items.length;
+    nextAnswers.score_percent = items.length > 0
+      ? Math.round((nextAnswers.correct_count / items.length) * 100)
+      : 0;
+
+    const { error: updateError } = await supabase
+      .from(resultTable)
+      .update({
+        answers: nextAnswers,
+      })
+      .eq('id', sessionId)
+      .eq('student_id', req.student.id);
+
+    if (updateError) {
+      console.error('Persist answer reveal failed:', updateError);
+      return res.status(500).json({ error: 'Failed to save answer result' });
+    }
+
+    return res.json({
+      is_correct: isCorrect,
+      correct_index: correctIndex,
+      explanation: String(questionRow.explanation || ''),
+      can_continue: true,
+      answered_count: nextAnswers.answered_count,
+      total_questions: items.length,
+    });
+  } catch (error) {
+    console.error('Test answer error:', error);
+    return res.status(500).json({ error: 'Internal server error during answer reveal' });
+  }
+});
+
 router.post('/submit', async (req, res) => {
   try {
-    const {
-      test_session_id: sessionId,
-      type,
-      answers,
-      termination,
-    } = req.body || {};
+    const { test_session_id: sessionId, type } = req.body || {};
     const normalizedType = String(type || '').trim().toUpperCase();
-    const submittedAnswers = answers && typeof answers === 'object' ? answers : {};
-    const normalizedTermination = normalizeTerminationPayload(termination);
 
     if (!sessionId || !TEST_TYPES.includes(normalizedType)) {
       return res.status(400).json({ error: 'Invalid submit payload' });
     }
 
-    if (termination && !normalizedTermination) {
-      return res.status(400).json({ error: 'Invalid termination payload' });
-    }
+    const sessionContext = await loadSessionContext({
+      student: req.student,
+      type: normalizedType,
+      sessionId,
+    });
 
-    const language = normalizeLanguage(req.student.language);
-    const grade = req.student.grade;
-    const resultTable = buildResultTableName(normalizedType, language, grade);
-
-    const { data: sessionRow, error: sessionError } = await supabase
-      .from(resultTable)
-      .select('id, generated_questions')
-      .eq('id', sessionId)
-      .eq('student_id', req.student.id)
-      .maybeSingle();
-
-    if (sessionError || !sessionRow) {
+    if (!sessionContext) {
       return res.status(404).json({ error: 'Test session not found' });
     }
 
+    const { resultTable, sessionRow } = sessionContext;
     const generatedMeta = sessionRow.generated_questions;
     const items = Array.isArray(generatedMeta?.items) ? generatedMeta.items : [];
 
@@ -520,84 +608,34 @@ router.post('/submit', async (req, res) => {
       return res.status(400).json({ error: 'No generated questions attached to session' });
     }
 
-    const idsByTable = new Map();
-    for (const item of items) {
-      const itemSubject = String(item.subject || '').toLowerCase();
-      const itemGrade = Number(item.grade);
-      if (!SUBJECTS.includes(itemSubject) || !Number.isInteger(itemGrade)) {
-        continue;
-      }
-
-      const tableName = buildQuestionTableName(itemSubject, language, itemGrade);
-      if (!idsByTable.has(tableName)) {
-        idsByTable.set(tableName, new Set());
-      }
-      idsByTable.get(tableName).add(item.id);
+    const answersState = getAnswersState(sessionRow.answers);
+    if (answersState.submitted_at) {
+      return res.status(409).json({ error: 'Test session is already submitted' });
     }
 
-    const questionsById = new Map();
-    for (const [tableName, idsSet] of idsByTable.entries()) {
-      const ids = Array.from(idsSet);
-      if (ids.length === 0) {
-        continue;
-      }
-
-      const { data, error } = await supabase
-        .from(tableName)
-        .select('id, options')
-        .in('id', ids);
-
-      if (error) {
-        console.error(`Failed to load submitted questions from ${tableName}:`, error);
-        return res.status(500).json({ error: 'Failed to grade test answers' });
-      }
-
-      for (const row of data || []) {
-        questionsById.set(row.id, row);
-      }
-    }
-
-    let answeredCount = 0;
-    let correctCount = 0;
-    for (const item of items) {
-      const questionId = String(item.id || '');
-      const selectedValue = submittedAnswers[questionId];
-      if (selectedValue === undefined || selectedValue === null || selectedValue === '') {
-        continue;
-      }
-
-      const selectedIndex = Number(selectedValue);
-      if (!Number.isInteger(selectedIndex) || selectedIndex < 0) {
-        continue;
-      }
-
-      answeredCount += 1;
-      const question = questionsById.get(questionId);
-      const correctIndex = getCorrectOptionIndex(question?.options);
-      if (correctIndex >= 0 && selectedIndex === correctIndex) {
-        correctCount += 1;
-      }
-    }
-
+    const answeredCount = Object.keys(answersState.by_question).length;
+    const correctCount = Object.values(answersState.by_question).reduce(
+      (sum, answer) => sum + (answer.is_correct ? 1 : 0),
+      0,
+    );
     const totalQuestions = items.length;
     const scorePercent = totalQuestions > 0
       ? Math.round((correctCount / totalQuestions) * 100)
       : 0;
 
-    const answersPayload = {
-      submitted_answers: submittedAnswers,
+    const finalAnswers = {
+      ...answersState,
       answered_count: answeredCount,
       correct_count: correctCount,
       total_questions: totalQuestions,
       score_percent: scorePercent,
       submitted_at: new Date().toISOString(),
-      termination: normalizedTermination,
     };
 
     const { error: updateError } = await supabase
       .from(resultTable)
       .update({
-        answers: answersPayload,
+        answers: finalAnswers,
         total_score: scorePercent,
       })
       .eq('id', sessionId)

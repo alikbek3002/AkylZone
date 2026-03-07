@@ -53,6 +53,65 @@ interface AddQuestionPayload {
   imageUrl?: string;
 }
 
+export interface ReadinessLine {
+  grade: number;
+  required: number;
+  available: number;
+  label: string;
+}
+
+export interface ReadinessMainItem {
+  id: string;
+  title: string;
+  required_total: number;
+  available_total: number;
+  status: 'ready' | 'locked';
+  lines: ReadinessLine[];
+}
+
+export interface ReadinessTrialSubject {
+  id: string;
+  title: string;
+  display_name: string;
+  required_total: number;
+  available_total: number;
+  status: 'ready' | 'locked';
+  lines: ReadinessLine[];
+}
+
+export interface ReadinessTrialRound {
+  id: number;
+  title: string;
+  required_total: number;
+  available_total: number;
+  status: 'ready' | 'locked';
+  subjects: ReadinessTrialSubject[];
+}
+
+export interface ReadinessBranch {
+  branch: {
+    grade: number;
+    language: 'ru' | 'kg';
+    title: string;
+    class_title: string;
+    language_title: string;
+  };
+  test_types: Array<
+    | {
+      id: 'MAIN';
+      title: string;
+      status: 'ready' | 'locked';
+      items: ReadinessMainItem[];
+    }
+    | {
+      id: 'TRIAL';
+      title: string;
+      status: 'ready' | 'locked';
+      rounds: ReadinessTrialRound[];
+    }
+  >;
+}
+
 type RequestMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
 async function request<T>(
@@ -123,6 +182,11 @@ export function deleteStudent(studentId: string) {
 
 export function addQuestion(payload: AddQuestionPayload) {
   return request('/admin/questions', 'POST', payload);
+}
+
+export async function fetchContentReadiness() {
+  const response = await request<{ branches: ReadinessBranch[] }>('/admin/content-readiness', 'GET');
+  return response.branches;
 }
 
 export async function uploadImage(file: File): Promise<{ imageUrl: string }> {

@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
-import type { TerminationPayload } from '../lib/api';
+
+type AntiCheatSource =
+  | 'copy'
+  | 'contextmenu'
+  | 'visibilitychange'
+  | 'blur'
+  | 'fullscreen_exit'
+  | 'navigation'
+  | 'blocked_shortcut'
+  | 'printscreen';
 
 export interface AntiCheatViolation {
   reason: string;
-  source: TerminationPayload['source'];
+  source: AntiCheatSource;
   triggered_at: string;
 }
 
