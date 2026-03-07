@@ -8,10 +8,10 @@ const API_TARGET = process.env.API_TARGET || 'http://localhost:5050';
 const app = express();
 
 app.use(
-  '/api',
   createProxyMiddleware({
     target: API_TARGET,
     changeOrigin: true,
+    pathFilter: '/api',
   }),
 );
 
