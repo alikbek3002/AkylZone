@@ -51,9 +51,8 @@ export interface AvailableResponse {
 export interface GeneratedQuestion {
   id: string;
   text: string;
-  options: Array<{ text: string; is_correct: boolean }>;
+  options: Array<{ text: string }>;
   topic: string;
-  explanation: string;
   imageUrl: string;
 }
 
@@ -81,12 +80,30 @@ export interface SubmitTestResponse {
 }
 
 type RequestMethod = 'GET' | 'POST';
+type TerminationMode = 'normal' | 'violation';
+type TerminationSource =
+  | 'blur'
+  | 'visibilitychange'
+  | 'fullscreen_exit'
+  | 'printscreen'
+  | 'blocked_shortcut'
+  | 'copy'
+  | 'contextmenu'
+  | 'navigation';
+
+export interface TerminationPayload {
+  mode: TerminationMode;
+  reason: string;
+  source: TerminationSource;
+  triggered_at: string;
+}
 
 async function request<T>(
   path: string,
   method: RequestMethod,
   payload?: unknown,
   token?: string,
+  options?: Pick<RequestInit, 'keepalive'>,
 ): Promise<T> {
   const headers = new Headers();
   headers.set('Content-Type', 'application/json');
@@ -99,6 +116,7 @@ async function request<T>(
     method,
     headers,
     body: payload === undefined ? undefined : JSON.stringify(payload),
+    keepalive: options?.keepalive,
   });
 
   const raw = await response.text();
@@ -146,7 +164,9 @@ export function submitStudentTest(
     test_session_id: string;
     type: 'MAIN' | 'TRIAL';
     answers: Record<string, number>;
+    termination?: TerminationPayload;
   },
+  options?: Pick<RequestInit, 'keepalive'>,
 ) {
-  return request<SubmitTestResponse>('/tests/submit', 'POST', payload, token);
+  return request<SubmitTestResponse>('/tests/submit', 'POST', payload, token, options);
 }

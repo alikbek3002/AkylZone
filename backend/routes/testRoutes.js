@@ -9,6 +9,17 @@ const LANGUAGES = ['ru', 'kg'];
 const STUDENT_GRADES = [6, 7];
 const MAIN_QUESTIONS_PER_GRADE = 125;
 const TEST_TYPES = ['MAIN', 'TRIAL'];
+const TERMINATION_MODES = ['normal', 'violation'];
+const TERMINATION_SOURCES = [
+  'blur',
+  'visibilitychange',
+  'fullscreen_exit',
+  'printscreen',
+  'blocked_shortcut',
+  'copy',
+  'contextmenu',
+  'navigation',
+];
 
 const subjectsList = [
   { id: 'math', name_ru: 'Математика', name_kg: 'Математика' },
@@ -94,11 +105,45 @@ function sanitizeOptionsForStudent(options) {
 
   return options.map((option) => {
     if (typeof option === 'string') {
-      return { text: option, is_correct: false };
+      return { text: option };
     }
 
-    return { text: String(option?.text || ''), is_correct: Boolean(option?.is_correct) };
+    return { text: String(option?.text || '') };
   });
+}
+
+function normalizeTerminationPayload(termination) {
+  if (!termination || typeof termination !== 'object') {
+    return null;
+  }
+
+  const mode = String(termination.mode || '').trim().toLowerCase();
+  const reason = String(termination.reason || '').trim();
+  const source = String(termination.source || '').trim().toLowerCase();
+  const triggeredAt = String(termination.triggered_at || '').trim();
+
+  if (!TERMINATION_MODES.includes(mode)) {
+    return null;
+  }
+
+  if (!reason) {
+    return null;
+  }
+
+  if (!TERMINATION_SOURCES.includes(source)) {
+    return null;
+  }
+
+  if (!triggeredAt) {
+    return null;
+  }
+
+  return {
+    mode,
+    reason,
+    source,
+    triggered_at: triggeredAt,
+  };
 }
 
 async function getStudentById(studentId) {
@@ -417,7 +462,6 @@ router.post('/generate', async (req, res) => {
         text: question.question_text,
         options: sanitizeOptionsForStudent(question.options),
         topic: question.topic || '',
-        explanation: question.explanation || '',
         imageUrl: question.image_url || '',
       })),
     });
@@ -436,12 +480,22 @@ router.post('/generate', async (req, res) => {
 
 router.post('/submit', async (req, res) => {
   try {
-    const { test_session_id: sessionId, type, answers } = req.body || {};
+    const {
+      test_session_id: sessionId,
+      type,
+      answers,
+      termination,
+    } = req.body || {};
     const normalizedType = String(type || '').trim().toUpperCase();
     const submittedAnswers = answers && typeof answers === 'object' ? answers : {};
+    const normalizedTermination = normalizeTerminationPayload(termination);
 
     if (!sessionId || !TEST_TYPES.includes(normalizedType)) {
       return res.status(400).json({ error: 'Invalid submit payload' });
+    }
+
+    if (termination && !normalizedTermination) {
+      return res.status(400).json({ error: 'Invalid termination payload' });
     }
 
     const language = normalizeLanguage(req.student.language);
@@ -537,6 +591,7 @@ router.post('/submit', async (req, res) => {
       total_questions: totalQuestions,
       score_percent: scorePercent,
       submitted_at: new Date().toISOString(),
+      termination: normalizedTermination,
     };
 
     const { error: updateError } = await supabase
