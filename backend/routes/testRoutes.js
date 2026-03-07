@@ -81,6 +81,10 @@ function localizeText(language, ruText, kgText) {
   return language === 'kg' ? kgText : ruText;
 }
 
+function localizeStudentText(student, ruText, kgText) {
+  return localizeText(normalizeLanguage(student?.language), ruText, kgText);
+}
+
 function buildQuestionTableName(subject, language, grade) {
   return `questions_${subject}_${language}_${grade}`;
 }
@@ -168,12 +172,16 @@ async function authenticateStudent(req, res, next) {
     if (token) {
       const payload = verifyStudentToken(token);
       if (!payload?.sub) {
-        return res.status(401).json({ error: 'Invalid or expired student token' });
+        return res.status(401).json({
+          error: localizeText(payload?.language, 'Недействительный или просроченный токен ученика', 'Окуучунун токени жараксыз же мөөнөтү өтүп кеткен'),
+        });
       }
 
       student = await getStudentById(payload.sub);
       if (!student) {
-        return res.status(401).json({ error: 'Student not found for token' });
+        return res.status(401).json({
+          error: localizeText(payload.language, 'Ученик для токена не найден', 'Токен үчүн окуучу табылган жок'),
+        });
       }
     } else if (req.headers['x-student-id']) {
       // Compatibility fallback for old clients.
@@ -268,7 +276,7 @@ router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body || {};
     if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
+      return res.status(400).json({ error: 'Требуются логин и пароль / Логин жана сырсөз талап кылынат' });
     }
 
     const normalizedUsername = String(username).trim().toLowerCase();
@@ -280,20 +288,24 @@ router.post('/login', async (req, res) => {
       .maybeSingle();
 
     if (error || !student) {
-      return res.status(401).json({ error: 'Неверный логин или пароль' });
+      return res.status(401).json({ error: 'Неверный логин или пароль / Логин же сырсөз туура эмес' });
     }
 
+    const language = normalizeLanguage(student.language);
     const candidateHash = hashPassword(plainPassword);
     const hashMatches = student.password_hash && student.password_hash === candidateHash;
     const plainMatches = student.plain_password && student.plain_password === plainPassword;
 
     if (!hashMatches && !plainMatches) {
-      return res.status(401).json({ error: 'Неверный логин или пароль' });
+      return res.status(401).json({
+        error: localizeText(language, 'Неверный логин или пароль', 'Логин же сырсөз туура эмес'),
+      });
     }
 
-    const language = normalizeLanguage(student.language);
     if (!LANGUAGES.includes(language) || !STUDENT_GRADES.includes(student.grade)) {
-      return res.status(400).json({ error: 'У ученика не настроены корректные язык/класс' });
+      return res.status(400).json({
+        error: localizeText(language, 'У ученика не настроены корректные язык/класс', 'Окуучу үчүн тил же класс туура жөндөлгөн эмес'),
+      });
     }
 
     const token = signStudentToken({
@@ -310,7 +322,7 @@ router.post('/login', async (req, res) => {
     return res.json(toStudentResponse(student, token));
   } catch (error) {
     console.error('Student login error:', error);
-    return res.status(500).json({ error: 'Ошибка входа ученика' });
+    return res.status(500).json({ error: 'Ошибка входа ученика / Окуучунун кирүүсүндө ката кетти' });
   }
 });
 
@@ -342,7 +354,7 @@ router.get('/available', (req, res) => {
       },
       {
         id: 'TRIAL',
-        title: localizeText(language, 'Пробный тест', 'Пробный тест'),
+        title: localizeText(language, 'Пробный тест', 'Сыноо тест'),
       },
     ],
     subjects,
@@ -380,13 +392,15 @@ router.post('/generate', async (req, res) => {
     const language = normalizeLanguage(req.student.language);
 
     if (!TEST_TYPES.includes(normalizedType)) {
-      return res.status(400).json({ error: 'Invalid test type' });
+      return res.status(400).json({ error: localizeText(language, 'Некорректный тип теста', 'Тесттин тиби туура эмес') });
     }
 
     const fetchPlan = [];
     if (normalizedType === 'MAIN') {
       if (!SUBJECTS.includes(normalizedSubject)) {
-        return res.status(400).json({ error: 'Invalid subject for MAIN test' });
+        return res.status(400).json({
+          error: localizeText(language, 'Некорректный предмет для предметного теста', 'Предметтик тест үчүн предмет туура эмес'),
+        });
       }
 
       fetchPlan.push(
@@ -442,7 +456,9 @@ router.post('/generate', async (req, res) => {
 
     if (resultError || !resultData) {
       console.error('Test session insert error:', resultError);
-      return res.status(500).json({ error: 'Failed to create test session' });
+      return res.status(500).json({
+        error: localizeText(language, 'Не удалось создать тестовую сессию', 'Тест сессиясын түзүү мүмкүн болгон жок'),
+      });
     }
 
     return res.json({
@@ -467,14 +483,17 @@ router.post('/generate', async (req, res) => {
     });
   } catch (error) {
     if (error.code === 'NOT_ENOUGH_QUESTIONS') {
+      const language = normalizeLanguage(req.student.language);
       return res.status(400).json({
-        error: 'Недостаточно вопросов в базе для генерации теста',
+        error: localizeText(language, 'Недостаточно вопросов в базе для генерации теста', 'Тест түзүү үчүн базада суроолор жетишсиз'),
         details: error.meta,
       });
     }
 
     console.error('Test generation error:', error);
-    return res.status(500).json({ error: 'Internal server error during test generation' });
+    return res.status(500).json({
+      error: localizeStudentText(req.student, 'Внутренняя ошибка при генерации теста', 'Тестти түзүүдө ички ката кетти'),
+    });
   }
 });
 
@@ -489,16 +508,16 @@ router.post('/submit', async (req, res) => {
     const normalizedType = String(type || '').trim().toUpperCase();
     const submittedAnswers = answers && typeof answers === 'object' ? answers : {};
     const normalizedTermination = normalizeTerminationPayload(termination);
+    const language = normalizeLanguage(req.student.language);
 
     if (!sessionId || !TEST_TYPES.includes(normalizedType)) {
-      return res.status(400).json({ error: 'Invalid submit payload' });
+      return res.status(400).json({ error: localizeText(language, 'Некорректные данные отправки', 'Жөнөтүлгөн маалыматтар туура эмес') });
     }
 
     if (termination && !normalizedTermination) {
-      return res.status(400).json({ error: 'Invalid termination payload' });
+      return res.status(400).json({ error: localizeText(language, 'Некорректные данные завершения теста', 'Тестти аяктоо маалыматы туура эмес') });
     }
 
-    const language = normalizeLanguage(req.student.language);
     const grade = req.student.grade;
     const resultTable = buildResultTableName(normalizedType, language, grade);
 
@@ -510,14 +529,16 @@ router.post('/submit', async (req, res) => {
       .maybeSingle();
 
     if (sessionError || !sessionRow) {
-      return res.status(404).json({ error: 'Test session not found' });
+      return res.status(404).json({ error: localizeText(language, 'Тестовая сессия не найдена', 'Тест сессиясы табылган жок') });
     }
 
     const generatedMeta = sessionRow.generated_questions;
     const items = Array.isArray(generatedMeta?.items) ? generatedMeta.items : [];
 
     if (items.length === 0) {
-      return res.status(400).json({ error: 'No generated questions attached to session' });
+      return res.status(400).json({
+        error: localizeText(language, 'К тестовой сессии не привязаны сгенерированные вопросы', 'Тест сессиясына түзүлгөн суроолор байланган эмес'),
+      });
     }
 
     const idsByTable = new Map();
@@ -549,7 +570,7 @@ router.post('/submit', async (req, res) => {
 
       if (error) {
         console.error(`Failed to load submitted questions from ${tableName}:`, error);
-        return res.status(500).json({ error: 'Failed to grade test answers' });
+        return res.status(500).json({ error: localizeText(language, 'Не удалось проверить ответы теста', 'Тесттин жоопторун текшерүү мүмкүн болгон жок') });
       }
 
       for (const row of data || []) {
@@ -605,11 +626,11 @@ router.post('/submit', async (req, res) => {
 
     if (updateError) {
       console.error('Submit update error:', updateError);
-      return res.status(500).json({ error: 'Failed to save test submission' });
+      return res.status(500).json({ error: localizeText(language, 'Не удалось сохранить результаты теста', 'Тесттин жыйынтыктарын сактоо мүмкүн болгон жок') });
     }
 
     return res.json({
-      message: 'Submission successful',
+      message: localizeText(language, 'Результаты успешно отправлены', 'Жыйынтыктар ийгиликтүү жөнөтүлдү'),
       score: scorePercent,
       correct: correctCount,
       answered: answeredCount,
@@ -617,7 +638,9 @@ router.post('/submit', async (req, res) => {
     });
   } catch (error) {
     console.error('Test submit error:', error);
-    return res.status(500).json({ error: 'Internal server error during test submit' });
+    return res.status(500).json({
+      error: localizeStudentText(req.student, 'Внутренняя ошибка при отправке теста', 'Тестти жөнөтүүдө ички ката кетти'),
+    });
   }
 });
 

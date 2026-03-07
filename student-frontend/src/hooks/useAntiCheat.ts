@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import type { TerminationPayload } from '../lib/api';
+import { getPortalCopy, type PortalLanguage } from '../lib/portalI18n';
 
 export interface AntiCheatViolation {
   reason: string;
@@ -9,6 +10,7 @@ export interface AntiCheatViolation {
 
 interface UseAntiCheatProps {
   isActive: boolean;
+  language?: PortalLanguage;
   onViolation: (violation: AntiCheatViolation) => void;
 }
 
@@ -45,26 +47,30 @@ function isBlockedShortcut(event: KeyboardEvent) {
   return false;
 }
 
-function buildShortcutViolation(event: KeyboardEvent): AntiCheatViolation {
+function buildShortcutViolation(
+  event: KeyboardEvent,
+  copy: ReturnType<typeof getPortalCopy>,
+): AntiCheatViolation {
   const key = event.key.toLowerCase();
   if (event.key === 'PrintScreen' || (event.metaKey && event.shiftKey && ['3', '4', '5'].includes(key))) {
     return {
-      reason: 'Обнаружена попытка сделать снимок экрана.',
+      reason: copy.antiCheatScreenshot,
       source: 'printscreen',
       triggered_at: new Date().toISOString(),
     };
   }
 
   return {
-    reason: 'Обнаружено использование запрещенного сочетания клавиш.',
+    reason: copy.antiCheatShortcut,
     source: 'blocked_shortcut',
     triggered_at: new Date().toISOString(),
   };
 }
 
-export function useAntiCheat({ isActive, onViolation }: UseAntiCheatProps) {
+export function useAntiCheat({ isActive, language, onViolation }: UseAntiCheatProps) {
   const onViolationRef = useRef(onViolation);
   const violationTriggeredRef = useRef(false);
+  const copy = getPortalCopy(language);
 
   useEffect(() => {
     onViolationRef.current = onViolation;
@@ -92,7 +98,7 @@ export function useAntiCheat({ isActive, onViolation }: UseAntiCheatProps) {
     const handleClipboard = (event: ClipboardEvent) => {
       event.preventDefault();
       triggerViolation({
-        reason: 'Обнаружена попытка копирования или вставки во время теста.',
+        reason: copy.antiCheatCopyPaste,
         source: 'copy',
         triggered_at: new Date().toISOString(),
       });
@@ -101,7 +107,7 @@ export function useAntiCheat({ isActive, onViolation }: UseAntiCheatProps) {
     const handleContextMenu = (event: MouseEvent) => {
       event.preventDefault();
       triggerViolation({
-        reason: 'Обнаружена попытка открыть контекстное меню.',
+        reason: copy.antiCheatContextMenu,
         source: 'contextmenu',
         triggered_at: new Date().toISOString(),
       });
@@ -110,7 +116,7 @@ export function useAntiCheat({ isActive, onViolation }: UseAntiCheatProps) {
     const handleVisibilityChange = () => {
       if (document.hidden) {
         triggerViolation({
-          reason: 'Зафиксировано переключение на другую вкладку или скрытие окна.',
+          reason: copy.antiCheatVisibility,
           source: 'visibilitychange',
           triggered_at: new Date().toISOString(),
         });
@@ -119,7 +125,7 @@ export function useAntiCheat({ isActive, onViolation }: UseAntiCheatProps) {
 
     const handleBlur = () => {
       triggerViolation({
-        reason: 'Окно тестирования потеряло фокус.',
+        reason: copy.antiCheatBlur,
         source: 'blur',
         triggered_at: new Date().toISOString(),
       });
@@ -128,7 +134,7 @@ export function useAntiCheat({ isActive, onViolation }: UseAntiCheatProps) {
     const handleFullscreenChange = () => {
       if (!isFullscreenActive()) {
         triggerViolation({
-          reason: 'Полноэкранный режим был отключен во время теста.',
+          reason: copy.antiCheatFullscreenExit,
           source: 'fullscreen_exit',
           triggered_at: new Date().toISOString(),
         });
@@ -138,7 +144,7 @@ export function useAntiCheat({ isActive, onViolation }: UseAntiCheatProps) {
     const handlePopState = () => {
       window.history.pushState({ antiCheatGuard: true }, document.title, window.location.href);
       triggerViolation({
-        reason: 'Зафиксирована попытка покинуть тест через навигацию браузера.',
+        reason: copy.antiCheatNavigation,
         source: 'navigation',
         triggered_at: new Date().toISOString(),
       });
@@ -155,7 +161,7 @@ export function useAntiCheat({ isActive, onViolation }: UseAntiCheatProps) {
       }
 
       event.preventDefault();
-      triggerViolation(buildShortcutViolation(event));
+      triggerViolation(buildShortcutViolation(event, copy));
     };
 
     window.history.pushState({ antiCheatGuard: true }, document.title, window.location.href);
@@ -189,7 +195,17 @@ export function useAntiCheat({ isActive, onViolation }: UseAntiCheatProps) {
       window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [isActive]);
+  }, [
+    copy.antiCheatBlur,
+    copy.antiCheatContextMenu,
+    copy.antiCheatCopyPaste,
+    copy.antiCheatFullscreenExit,
+    copy.antiCheatNavigation,
+    copy.antiCheatVisibility,
+    copy.antiCheatScreenshot,
+    copy.antiCheatShortcut,
+    isActive,
+  ]);
 
   const containerStyle = useMemo<CSSProperties>(
     () => ({

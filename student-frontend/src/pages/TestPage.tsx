@@ -10,6 +10,7 @@ import {
   type SubmitTestResponse,
   type TerminationPayload,
 } from '../lib/api';
+import { getPortalCopy } from '../lib/portalI18n';
 import { useAuthStore } from '../store/authStore';
 
 type TestType = 'MAIN' | 'TRIAL';
@@ -91,6 +92,7 @@ export default function TestPage() {
   const [lockedState, setLockedState] = useState<LockedState | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const copy = getPortalCopy(student?.language);
 
   const returnToDashboard = useCallback(async () => {
     try {
@@ -128,7 +130,7 @@ export default function TestPage() {
           setSelectedRound(data.rounds[0].id);
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Ошибка загрузки параметров теста';
+        const message = error instanceof Error ? error.message : copy.availableParamsError;
         setApiError(message);
       } finally {
         setLoading(false);
@@ -136,20 +138,20 @@ export default function TestPage() {
     };
 
     void loadAvailable();
-  }, [student, token, testType, navigate]);
+  }, [copy.availableParamsError, student, token, testType, navigate]);
 
   const setupLabel = useMemo(() => {
     if (testType === 'MAIN') {
-      return student?.language === 'kg' ? 'Предметтик тест' : 'Предметный тест';
+      return copy.subjectTest;
     }
 
-    return 'Пробный тест';
-  }, [student?.language, testType]);
+    return copy.trialTest;
+  }, [copy.subjectTest, copy.trialTest, testType]);
 
   const submitCurrentTest = useCallback(
     async (termination?: TerminationPayload, keepalive?: boolean) => {
       if (!token || !testData || !testType) {
-        throw new Error('Тестовая сессия недоступна');
+        throw new Error(copy.sessionUnavailable);
       }
 
       return submitStudentTest(
@@ -163,7 +165,7 @@ export default function TestPage() {
         keepalive ? { keepalive: true } : undefined,
       );
     },
-    [answers, testData, testType, token],
+    [answers, copy.sessionUnavailable, testData, testType, token],
   );
 
   const submitViolation = useCallback(
@@ -175,7 +177,7 @@ export default function TestPage() {
         setPhase('finished');
         setLockedState(null);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Ошибка автоматической отправки результатов';
+        const message = error instanceof Error ? error.message : copy.autoSubmitError;
         setLockedState({
           termination,
           isSubmitting: false,
@@ -183,7 +185,7 @@ export default function TestPage() {
         });
       }
     },
-    [submitCurrentTest],
+    [copy.autoSubmitError, submitCurrentTest],
   );
 
   const handleViolation = useCallback(
@@ -213,6 +215,7 @@ export default function TestPage() {
 
   const { containerProps } = useAntiCheat({
     isActive: phase === 'active' && Boolean(testData) && lockedState === null,
+    language: student?.language,
     onViolation: handleViolation,
   });
 
@@ -222,6 +225,9 @@ export default function TestPage() {
   const selectedAnswer = activeQuestion ? answers[activeQuestion.id] : undefined;
   const isCurrentAnswered = selectedAnswer !== undefined;
   const isLastQuestion = totalQuestions > 0 && currentQuestionIndex === totalQuestions - 1;
+  const activeTestTitle = testData?.test_info.type === 'MAIN'
+    ? copy.subjectTest
+    : copy.trialTest;
 
   const handleStart = async () => {
     if (!token || !testType) {
@@ -229,7 +235,7 @@ export default function TestPage() {
     }
 
     if (testType === 'MAIN' && !selectedSubject) {
-      setApiError('Выберите предмет для тестирования');
+      setApiError(copy.subjectRequiredError);
       return;
     }
 
@@ -242,7 +248,7 @@ export default function TestPage() {
     try {
       await requestDocumentFullscreen();
     } catch {
-      setApiError('Для начала теста необходимо разрешить полноэкранный режим.');
+      setApiError(copy.fullscreenRequired);
       setIsGenerating(false);
       return;
     }
@@ -259,7 +265,7 @@ export default function TestPage() {
       setAnswers({});
       setPhase('active');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Ошибка генерации теста';
+      const message = error instanceof Error ? error.message : copy.generationError;
       setApiError(message);
 
       try {
@@ -305,7 +311,7 @@ export default function TestPage() {
       setFinalTermination(null);
       setPhase('finished');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Ошибка отправки результатов';
+      const message = error instanceof Error ? error.message : copy.submitError;
       setApiError(message);
     } finally {
       setIsSubmitting(false);
@@ -328,13 +334,13 @@ export default function TestPage() {
   };
 
   if (loading) {
-    return <div className="p-10 text-center">Загрузка...</div>;
+    return <div className="p-10 text-center">{copy.loading}</div>;
   }
 
   if (apiError && phase === 'setup' && !testData && !submitResult) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-lg w-full rounded-xl border border-red-200 bg-red-50 p-6 text-red-700">
+      <div className="min-h-screen flex items-center justify-center px-4 py-6 sm:px-6">
+        <div className="max-w-lg w-full rounded-[28px] border border-red-200 bg-white p-6 text-red-700 shadow-[0_24px_70px_-36px_rgba(15,23,42,0.28)]">
           {apiError}
         </div>
       </div>
@@ -345,26 +351,26 @@ export default function TestPage() {
     const violationFinished = finalTermination?.mode === 'violation';
 
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-sm text-center max-w-md w-full">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-6 sm:px-6">
+        <div className="w-full max-w-md rounded-[30px] border border-slate-200/70 bg-white/95 p-6 text-center shadow-[0_30px_90px_-40px_rgba(15,23,42,0.32)] sm:p-8">
           <h2 className={`text-2xl font-bold mb-4 ${violationFinished ? 'text-amber-600' : 'text-green-600'}`}>
-            {violationFinished ? 'Тест завершен автоматически' : 'Тест завершен'}
+            {violationFinished ? copy.testCompletedAuto : copy.testCompleted}
           </h2>
           {violationFinished && finalTermination && (
             <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4">
-              Причина: {finalTermination.reason}
+              {copy.reasonLabel}: {finalTermination.reason}
             </p>
           )}
-          <p className="text-gray-600">Правильных ответов: {submitResult.correct} из {submitResult.total}</p>
-          <p className="text-gray-600 mt-1">Отвечено: {submitResult.answered}</p>
-          <p className="text-gray-600 mt-1">Ваш результат: {submitResult.score}%</p>
+          <p className="text-gray-600">{copy.correctAnswersLabel(submitResult.correct, submitResult.total)}</p>
+          <p className="text-gray-600 mt-1">{copy.answeredLabel(submitResult.answered)}</p>
+          <p className="text-gray-600 mt-1">{copy.scoreLabel(submitResult.score)}</p>
           <button
             onClick={() => {
               void returnToDashboard();
             }}
             className="w-full mt-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium"
           >
-            Вернуться на главную
+            {copy.returnHome}
           </button>
         </div>
       </div>
@@ -373,27 +379,46 @@ export default function TestPage() {
 
   if (phase === 'setup' || !testData) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-sm max-w-md w-full">
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">{setupLabel}</h2>
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-5 sm:px-6 sm:py-8">
+        <div className="w-full max-w-lg rounded-[30px] border border-slate-200/70 bg-white/95 p-5 shadow-[0_28px_80px_-38px_rgba(15,23,42,0.3)] sm:p-8">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">{copy.setup}</p>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">{setupLabel}</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                {copy.reviewParams}
+              </p>
+            </div>
             <button
               onClick={() => {
                 void returnToDashboard();
               }}
-              className="shrink-0 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
-              Назад
+              {copy.back}
             </button>
+          </div>
+
+          <div className="mb-6 grid grid-cols-2 gap-3 rounded-[24px] border border-slate-200 bg-slate-50 p-3 sm:p-4">
+            <div className="rounded-2xl bg-white px-3 py-3 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{copy.gradeLabel}</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900 sm:text-base">{copy.gradeValue(student?.grade ?? 0)}</p>
+            </div>
+            <div className="rounded-2xl bg-white px-3 py-3 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{copy.languageLabel}</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900 sm:text-base">
+                {copy.languageName(student?.language ?? 'ru')}
+              </p>
+            </div>
           </div>
 
           {testType === 'MAIN' && (
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Выберите предмет</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{copy.selectSubject}</label>
               <select
                 value={selectedSubject}
                 onChange={(event) => setSelectedSubject(event.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-xl border border-gray-300 bg-white p-3.5 text-base outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {(availableData?.subjects || []).map((subject) => (
                   <option key={subject.id} value={subject.id}>
@@ -402,9 +427,12 @@ export default function TestPage() {
                 ))}
               </select>
               {availableData?.main_test && (
-                <p className="mt-2 text-xs text-gray-500">
-                  Программа: {availableData.main_test.grades[0]}-{availableData.main_test.grades[1]} класс,
-                  всего {availableData.main_test.total_questions} вопросов
+                <p className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-gray-500">
+                  {copy.programInfo(
+                    availableData.main_test.grades[0],
+                    availableData.main_test.grades[1],
+                    availableData.main_test.total_questions,
+                  )}
                 </p>
               )}
             </div>
@@ -412,15 +440,15 @@ export default function TestPage() {
 
           {testType === 'TRIAL' && (
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Выберите тур</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{copy.selectRound}</label>
               <select
                 value={selectedRound}
                 onChange={(event) => setSelectedRound(Number(event.target.value))}
-                className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-xl border border-gray-300 bg-white p-3.5 text-base outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {(availableData?.rounds || []).map((round) => (
                   <option key={round.id} value={round.id}>
-                    {round.title} ({round.total_questions} вопросов)
+                    {round.title} ({copy.questionsCountLabel(round.total_questions)})
                   </option>
                 ))}
               </select>
@@ -436,9 +464,9 @@ export default function TestPage() {
           <button
             onClick={handleStart}
             disabled={isGenerating}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl font-medium"
+            className="h-12 w-full rounded-xl bg-blue-600 px-4 text-base font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
           >
-            {isGenerating ? 'Подготовка теста...' : 'Начать тестирование'}
+            {isGenerating ? copy.preparingTest : copy.startTesting}
           </button>
         </div>
       </div>
@@ -447,16 +475,16 @@ export default function TestPage() {
 
   if (!activeQuestion) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-lg w-full rounded-xl border border-red-200 bg-white p-6 text-center">
-          <p className="text-red-700 mb-4">Не удалось загрузить текущий вопрос.</p>
+      <div className="min-h-screen flex items-center justify-center px-4 py-6">
+        <div className="max-w-lg w-full rounded-[28px] border border-red-200 bg-white p-6 text-center shadow-[0_24px_70px_-36px_rgba(15,23,42,0.28)]">
+          <p className="text-red-700 mb-4">{copy.currentQuestionLoadError}</p>
           <button
             onClick={() => {
               void returnToDashboard();
             }}
             className="rounded-lg bg-blue-600 px-5 py-2.5 text-white font-medium hover:bg-blue-700"
           >
-            Вернуться на главную
+            {copy.returnHome}
           </button>
         </div>
       </div>
@@ -464,16 +492,16 @@ export default function TestPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8" {...containerProps}>
+    <div className="min-h-screen px-3 pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-3 sm:px-6 sm:pb-8 sm:pt-6" {...containerProps}>
       {lockedState ? (
-        <div className="max-w-2xl mx-auto min-h-[70vh] flex items-center justify-center">
-          <div className="w-full rounded-2xl border border-amber-200 bg-white p-8 shadow-sm text-center">
-            <h2 className="text-2xl font-bold text-amber-700 mb-3">Тест заблокирован</h2>
+        <div className="mx-auto flex min-h-[70vh] max-w-2xl items-center justify-center">
+          <div className="w-full rounded-[30px] border border-amber-200 bg-white p-6 text-center shadow-[0_28px_80px_-36px_rgba(15,23,42,0.32)] sm:p-8">
+            <h2 className="text-2xl font-bold text-amber-700 mb-3">{copy.testBlocked}</h2>
             <p className="text-gray-700">{lockedState.termination.reason}</p>
 
             {lockedState.isSubmitting ? (
               <p className="mt-6 text-sm text-gray-500">
-                Результаты автоматически отправляются. Пожалуйста, не закрывайте страницу.
+                {copy.autoSubmittingResults}
               </p>
             ) : (
               <>
@@ -481,17 +509,17 @@ export default function TestPage() {
                 <div className="mt-6 flex flex-col gap-3">
                   <button
                     onClick={handleRetryViolationSubmit}
-                    className="w-full rounded-xl bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700"
+                    className="h-12 w-full rounded-xl bg-blue-600 px-5 font-medium text-white hover:bg-blue-700"
                   >
-                    Повторить отправку
+                    {copy.retrySubmit}
                   </button>
                   <button
                     onClick={() => {
                       void returnToDashboard();
                     }}
-                    className="w-full rounded-xl border border-gray-300 px-5 py-3 font-medium text-gray-700 hover:bg-gray-50"
+                    className="h-12 w-full rounded-xl border border-gray-300 px-5 font-medium text-gray-700 hover:bg-gray-50"
                   >
-                    Выйти без сохранения
+                    {copy.exitWithoutSave}
                   </button>
                 </div>
               </>
@@ -500,66 +528,69 @@ export default function TestPage() {
         </div>
       ) : (
         <>
-          <header className="max-w-4xl mx-auto flex justify-between items-center mb-8 gap-4">
-            <div>
-              <h1 className="text-xl font-bold text-gray-800">
-                {testData.test_info.type === 'MAIN'
-                  ? student?.language === 'kg'
-                    ? 'Предметтик тест'
-                    : 'Предметный тест'
-                  : 'Пробный тест'}
-              </h1>
-              <p className="text-gray-500 text-sm mt-1">
-                Вопрос {currentQuestionIndex + 1} из {totalQuestions}
-              </p>
+          <header className="sticky top-0 z-20 mx-auto mb-4 max-w-4xl rounded-[24px] border border-slate-200/80 bg-white/92 px-4 py-4 shadow-[0_18px_50px_-34px_rgba(15,23,42,0.3)] backdrop-blur sm:mb-6 sm:px-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">{copy.activeTest}</p>
+                <h1 className="mt-1 text-base font-bold text-gray-800 sm:text-xl">
+                  {activeTestTitle}
+                </h1>
+                <p className="mt-1 text-sm text-gray-500">
+                  {copy.questionCounter(currentQuestionIndex + 1, totalQuestions)}
+                </p>
+              </div>
+              <div className="shrink-0 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700">
+                {answeredCount}/{totalQuestions}
+              </div>
             </div>
-            <div className="flex bg-white px-4 py-2 rounded-full border border-gray-200 shadow-sm font-mono text-blue-600 font-medium">
-              {answeredCount}/{totalQuestions}
+
+            <div className="mt-4">
+              <div className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                <span>{copy.progress}</span>
+                <span>{Math.round(((currentQuestionIndex + 1) / totalQuestions) * 100)}%</span>
+              </div>
+              <div className="w-full rounded-full bg-slate-200 h-2">
+                <div
+                  className="h-2 rounded-full bg-blue-600 transition-all duration-300"
+                  style={{ width: `${((currentQuestionIndex + 1) / totalQuestions) * 100}%` }}
+                />
+              </div>
             </div>
           </header>
 
-          <div className="max-w-4xl mx-auto mb-6">
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${((currentQuestionIndex + 1) / totalQuestions) * 100}%` }}
-              />
-            </div>
-          </div>
-
           {apiError && (
-            <div className="max-w-4xl mx-auto mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="mx-auto mb-4 max-w-4xl rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {apiError}
             </div>
           )}
 
-          <main className="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <main className="mx-auto max-w-4xl overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-[0_24px_70px_-40px_rgba(15,23,42,0.25)]">
             {activeQuestion.topic && (
-              <div className="px-6 md:px-10 pt-4">
-                <span className="inline-block px-3 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-full border border-blue-200">
+              <div className="px-4 pt-4 sm:px-8 sm:pt-5">
+                <span className="inline-block rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700 sm:text-xs">
                   {activeQuestion.topic}
                 </span>
               </div>
             )}
 
             {activeQuestion.imageUrl && (
-              <div className="px-6 md:px-10 pt-4">
+              <div className="px-4 pt-4 sm:px-8">
                 <img
                   src={activeQuestion.imageUrl}
-                  alt="Иллюстрация к вопросу"
-                  className="max-h-64 h-auto w-auto max-w-full rounded-xl border border-gray-200 object-contain"
+                  alt={copy.imageAlt}
+                  className="max-h-72 w-auto max-w-full rounded-2xl border border-gray-200 object-contain"
                 />
               </div>
             )}
 
-            <div className="p-6 md:p-10 border-b border-gray-100">
-              <h3 className="text-lg md:text-xl text-gray-900 leading-relaxed font-medium">
+            <div className="border-b border-gray-100 px-4 py-5 sm:px-8 sm:py-8">
+              <h3 className="text-lg font-semibold leading-8 text-gray-900 sm:text-2xl sm:leading-10">
                 {activeQuestion.text}
               </h3>
             </div>
 
-            <div className="p-6 md:p-10 bg-gray-50/50">
-              <div className="flex flex-col gap-3">
+            <div className="bg-gray-50/60 px-4 py-4 sm:px-8 sm:py-6">
+              <div className="flex flex-col gap-3 sm:gap-4">
                 {activeQuestion.options.map((option, index) => {
                   const isSelected = selectedAnswer === index;
                   const optionClass = isSelected
@@ -571,12 +602,12 @@ export default function TestPage() {
                       key={index}
                       onClick={() => handleAnswerSelect(index)}
                       disabled={isCurrentAnswered}
-                      className={`w-full text-left p-4 rounded-xl border transition-all ${optionClass} ${
+                      className={`w-full rounded-2xl border p-4 text-left transition-all sm:p-5 ${optionClass} ${
                         isCurrentAnswered ? 'cursor-default' : ''
                       }`}
                     >
                       <span
-                        className={`inline-block w-8 h-8 text-center leading-8 rounded-full border mr-4 font-medium text-sm ${
+                        className={`mr-4 inline-flex h-8 w-8 items-center justify-center rounded-full border text-sm font-medium sm:h-9 sm:w-9 ${
                           isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-white'
                         }`}
                       >
@@ -588,14 +619,20 @@ export default function TestPage() {
                 })}
               </div>
             </div>
+          </main>
 
-            <div className="p-6 md:p-10 border-t border-gray-100 flex justify-end items-center bg-white">
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200/80 bg-white/96 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-18px_50px_-34px_rgba(15,23,42,0.24)] backdrop-blur sm:static sm:mx-auto sm:mt-4 sm:max-w-4xl sm:border-0 sm:bg-transparent sm:px-0 sm:pb-0 sm:pt-0 sm:shadow-none">
+            <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-center text-sm text-gray-500 sm:text-left">
+                {isCurrentAnswered ? copy.answerSaved : copy.chooseOneAnswer}
+              </p>
+
               {isCurrentAnswered && !isLastQuestion && (
                 <button
                   onClick={handleNextQuestion}
-                  className="px-8 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm"
+                  className="h-12 w-full rounded-xl bg-blue-600 px-6 text-base font-semibold text-white shadow-sm hover:bg-blue-700 sm:w-auto"
                 >
-                  Следующий вопрос
+                  {copy.nextQuestion}
                 </button>
               )}
 
@@ -603,17 +640,13 @@ export default function TestPage() {
                 <button
                   onClick={handleSubmit}
                   disabled={isSubmitting}
-                  className="px-8 py-2.5 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-60"
+                  className="h-12 w-full rounded-xl bg-emerald-600 px-6 text-base font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 sm:w-auto"
                 >
-                  {isSubmitting ? 'Отправка...' : 'Завершить тест'}
+                  {isSubmitting ? copy.submitting : copy.finishTest}
                 </button>
               )}
-
-              {!isCurrentAnswered && (
-                <p className="text-gray-400 text-sm italic">Выберите ответ, чтобы продолжить</p>
-              )}
             </div>
-          </main>
+          </div>
         </>
       )}
     </div>
