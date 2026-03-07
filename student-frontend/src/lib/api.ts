@@ -175,6 +175,7 @@ export function generateStudentTest(
     type: 'MAIN' | 'TRIAL';
     subject?: string;
     round?: number;
+    grade?: number;
   },
 ) {
   return request<GeneratedTestResponse>('/tests/generate', 'POST', payload, token);

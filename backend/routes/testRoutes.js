@@ -321,10 +321,11 @@ router.get('/available', async (req, res) => {
 
 router.post('/generate', async (req, res) => {
   try {
-    const { type, subject, round } = req.body || {};
+    const { type, subject, round, grade: selectedGrade } = req.body || {};
     const normalizedType = String(type || '').trim().toUpperCase();
     const normalizedSubject = String(subject || '').trim().toLowerCase();
     const selectedRound = Number(round);
+    const requestedGrade = Number(selectedGrade);
     const language = normalizeLanguage(req.student.language);
     const studentGrade = req.student.grade;
 
@@ -345,11 +346,22 @@ router.post('/generate', async (req, res) => {
         return res.status(400).json({ error: 'Invalid subject for MAIN test' });
       }
 
+      // If a specific grade is requested, validate it against the student's allowed window
+      const validGrades = [studentGrade - 1, studentGrade];
+      if (requestedGrade && !validGrades.includes(requestedGrade)) {
+        return res.status(400).json({ error: 'Invalid grade selection for this test' });
+      }
+
       const leaf = mainNode?.items?.find((item) => item.id === normalizedSubject) || null;
       if (!leaf || leaf.status !== 'ready') {
         blockedLeaf = leaf || { id: normalizedSubject, status: 'locked', lines: [] };
       } else {
-        for (const line of leaf.lines) {
+        // Only fetch the requested grade if provided, otherwise fallback to the original behavior and fetch both
+        const linesToFetch = requestedGrade
+          ? leaf.lines.filter((line) => line.grade === requestedGrade)
+          : leaf.lines;
+          
+        for (const line of linesToFetch) {
           fetchPlan.push({
             subject: normalizedSubject,
             grade: line.grade,

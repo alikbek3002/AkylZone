@@ -1,22 +1,14 @@
-﻿import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, LockKeyhole, Play, Sparkles, XCircle } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+﻿import { useState, useEffect } from 'react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Sparkles, XCircle } from 'lucide-react';
+import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import {
   answerStudentQuestion,
-  fetchAvailableTests,
-  generateStudentTest,
   submitStudentTest,
   type AnswerQuestionResponse,
-  type AvailableResponse,
   type GeneratedTestResponse,
   type SubmitTestResponse,
 } from '../lib/api';
-
-function normalizeTestType(value: string | undefined): 'MAIN' | 'TRIAL' | null {
-  const upper = String(value || '').trim().toUpperCase();
-  return upper === 'MAIN' || upper === 'TRIAL' ? upper : null;
-}
 
 function localizeUi(language: 'ru' | 'kg' | undefined, ruText: string, kgText: string) {
   return language === 'kg' ? kgText : ruText;
@@ -28,126 +20,46 @@ function getProgressLabel(answered: number, total: number, language: 'ru' | 'kg'
 
 type RevealState = Record<string, AnswerQuestionResponse>;
 
-function getMainWindowLabel(grade: number | undefined) {
-  if (grade === 7) {
-    return '6-7 тест';
-  }
-
-  return '5-6 тест';
-}
-
 export default function TestPage() {
-  const { id: rawTestType } = useParams();
-  const testType = normalizeTestType(rawTestType);
   const { student, token } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [availableData, setAvailableData] = useState<AvailableResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [apiError, setApiError] = useState<string | null>(null);
+  const testData = location.state?.testData as GeneratedTestResponse | undefined;
 
-  const [testData, setTestData] = useState<GeneratedTestResponse | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [revealedAnswers, setRevealedAnswers] = useState<RevealState>({});
   const [submitResult, setSubmitResult] = useState<SubmitTestResponse | null>(null);
-  const [selectedMainSubject, setSelectedMainSubject] = useState<string | null>(null);
 
-  const [isGenerating, setIsGenerating] = useState<string | number | null>(null);
   const [isAnswering, setIsAnswering] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!student || !token) {
-      navigate('/login');
-      return;
+    if (!testData) {
+      navigate('/dashboard', { replace: true });
     }
+  }, [testData, navigate]);
 
-    if (!testType) {
-      navigate('/dashboard');
-      return;
-    }
+  if (!student || !token) {
+    return <Navigate to="/login" replace />;
+  }
 
-    const loadTree = async () => {
-      setLoading(true);
-      setApiError(null);
-      setSelectedMainSubject(null);
+  if (!testData) {
+    return null;
+  }
 
-      try {
-        const data = await fetchAvailableTests(token);
-        setAvailableData(data);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Ошибка загрузки дерева тестов';
-        setApiError(message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void loadTree();
-  }, [navigate, student, testType, token]);
-
-  const activeNode = availableData?.test_types.find((node) => node.id === testType);
-  const currentQuestion = testData?.questions[currentQuestionIndex] || null;
+  const currentQuestion = testData.questions[currentQuestionIndex] || null;
   const currentReveal = currentQuestion ? revealedAnswers[currentQuestion.id] : undefined;
   const currentSelectedIndex = currentQuestion ? selectedAnswers[currentQuestion.id] : undefined;
   const answeredCount = Object.keys(revealedAnswers).length;
-  const mainWindowLabel = getMainWindowLabel(availableData?.branch.grade ?? student?.grade);
-
-  const handleStartMain = async (subjectId: string) => {
-    if (!token || testType !== 'MAIN') {
-      return;
-    }
-
-    setIsGenerating(subjectId);
-    setApiError(null);
-
-    try {
-      const data = await generateStudentTest(token, {
-        type: 'MAIN',
-        subject: subjectId,
-      });
-      setTestData(data);
-      setCurrentQuestionIndex(0);
-      setSelectedAnswers({});
-      setRevealedAnswers({});
-      setSubmitResult(null);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Ошибка генерации теста';
-      setApiError(message);
-    } finally {
-      setIsGenerating(null);
-    }
-  };
-
-  const handleStartTrial = async (roundId: number) => {
-    if (!token || testType !== 'TRIAL') {
-      return;
-    }
-
-    setIsGenerating(roundId);
-    setApiError(null);
-
-    try {
-      const data = await generateStudentTest(token, {
-        type: 'TRIAL',
-        round: roundId,
-      });
-      setTestData(data);
-      setCurrentQuestionIndex(0);
-      setSelectedAnswers({});
-      setRevealedAnswers({});
-      setSubmitResult(null);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Ошибка генерации теста';
-      setApiError(message);
-    } finally {
-      setIsGenerating(null);
-    }
-  };
+  const totalQuestions = testData.total_questions;
+  const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
+  const testType = testData.test_info.type;
 
   const handleAnswerSelect = async (selectedIndex: number) => {
-    if (!token || !testData || !currentQuestion || !testType || isAnswering || currentReveal) {
+    if (isAnswering || currentReveal || !currentQuestion) {
       return;
     }
 
@@ -162,12 +74,12 @@ export default function TestPage() {
         selected_index: selectedIndex,
       });
 
-      setSelectedAnswers((previous) => ({
-        ...previous,
+      setSelectedAnswers((prev) => ({
+        ...prev,
         [currentQuestion.id]: selectedIndex,
       }));
-      setRevealedAnswers((previous) => ({
-        ...previous,
+      setRevealedAnswers((prev) => ({
+        ...prev,
         [currentQuestion.id]: reveal,
       }));
     } catch (error) {
@@ -179,10 +91,6 @@ export default function TestPage() {
   };
 
   const handleSubmit = async () => {
-    if (!token || !testData || !testType) {
-      return;
-    }
-
     setIsSubmitting(true);
     setApiError(null);
 
@@ -199,26 +107,6 @@ export default function TestPage() {
       setIsSubmitting(false);
     }
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 px-4 py-10">
-        <div className="mx-auto max-w-4xl rounded-[28px] border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-[0_18px_55px_-28px_rgba(15,23,42,0.35)]">
-          Загружаем ветку теста...
-        </div>
-      </div>
-    );
-  }
-
-  if (apiError && !testData && !submitResult && !activeNode) {
-    return (
-      <div className="min-h-screen bg-slate-50 px-4 py-10">
-        <div className="mx-auto max-w-2xl rounded-[28px] border border-red-200 bg-red-50 p-8 text-red-700 shadow-[0_18px_55px_-28px_rgba(15,23,42,0.25)]">
-          {apiError}
-        </div>
-      </div>
-    );
-  }
 
   if (submitResult) {
     return (
@@ -251,305 +139,6 @@ export default function TestPage() {
     );
   }
 
-  if (!testData) {
-    return (
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.12),_transparent_24%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_100%)] px-4 py-8">
-        <div className="mx-auto max-w-5xl">
-          <header className="mb-8 rounded-[28px] border border-slate-200 bg-white/90 p-6 shadow-[0_18px_55px_-28px_rgba(15,23,42,0.35)] backdrop-blur">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <button
-                  onClick={() => navigate('/dashboard')}
-                  className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-950"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  {localizeUi(student?.language, 'К выбору типа теста', 'Тест тандоого кайтуу')}
-                </button>
-                <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">
-                  {activeNode?.title || localizeUi(student?.language, 'Тест', 'Тест')}
-                </h1>
-                <p className="mt-2 text-sm text-slate-600">
-                  {availableData?.branch.title}. {localizeUi(
-                    student?.language,
-                    'Путь и порядок полностью соответствуют дереву навигации.',
-                    'Жол жана тартип толугу менен навигация дарагына ылайык.',
-                  )}
-                </p>
-              </div>
-
-              <div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">
-                {availableData?.branch.language_title}
-              </div>
-            </div>
-          </header>
-
-          {apiError && (
-            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
-              {apiError}
-            </div>
-          )}
-
-          {testType === 'MAIN' && activeNode && 'items' in activeNode && (
-            <div className="space-y-5">
-              <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_55px_-30px_rgba(15,23,42,0.28)]">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-2xl font-semibold text-slate-950">
-                        {localizeUi(student?.language, 'Выбор предмета', 'Предмет тандоо')}
-                      </h2>
-                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
-                        {localizeUi(student?.language, 'Предметный маршрут', 'Предметтик маршрут')}
-                      </span>
-                    </div>
-                    <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                      {localizeUi(
-                        student?.language,
-                        'Сначала выберите предмет. Под выбранным предметом откроется тестовое окно 5-6 или 6-7 в зависимости от вашего класса.',
-                        'Адегенде предметти тандаңыз. Тандалган предметтин алдында сиздин классыңызга жараша 5-6 же 6-7 тест терезеси ачылат.',
-                      )}
-                    </p>
-                  </div>
-
-                  <div className="w-full max-w-sm rounded-[24px] border border-slate-200 bg-slate-50/90 p-4 lg:w-80">
-                    <div className="text-sm text-slate-600">
-                      {localizeUi(
-                        student?.language,
-                        'После выбора предмета конкретный тест соберется по предмету и вашей ветке класса.',
-                        'Предмет тандалгандан кийин тест предмет жана класстык бутагыңыз боюнча түзүлөт.',
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </article>
-
-              <div className="grid gap-5">
-                {activeNode.items.map((item) => {
-                  const isReady = item.status === 'ready';
-                  const isBusy = isGenerating === item.id;
-                  const isSelected = selectedMainSubject === item.id;
-
-                  return (
-                    <article
-                      key={item.id}
-                      className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_55px_-30px_rgba(15,23,42,0.28)]"
-                    >
-                      <div className="space-y-5">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                          <div className="space-y-4">
-                            <div className="flex flex-wrap items-center gap-3">
-                              <h2 className="text-2xl font-semibold text-slate-950">{item.title}</h2>
-                              <span
-                                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
-                                  isReady ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                                }`}
-                              >
-                                {isReady ? <CheckCircle2 className="h-3.5 w-3.5" /> : <LockKeyhole className="h-3.5 w-3.5" />}
-                                {isReady
-                                  ? localizeUi(student?.language, 'Ветка готова', 'Бутак даяр')
-                                  : localizeUi(student?.language, 'Пока недоступно', 'Азырынча жеткиликсиз')}
-                              </span>
-                            </div>
-
-                            <div className="grid gap-3 md:grid-cols-2">
-                              {item.lines.map((line) => (
-                                <div
-                                  key={line.grade}
-                                  className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700"
-                                >
-                                  <div className="font-medium text-slate-900">{line.label}</div>
-                                  <div className="mt-1 text-slate-500">
-                                    {localizeUi(student?.language, 'Сейчас', 'Азыр')} {line.available} / {line.required}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="w-full max-w-sm rounded-[24px] border border-slate-200 bg-slate-50/90 p-4 lg:w-80">
-                            <div className="text-sm text-slate-600">
-                              {localizeUi(student?.language, 'Нужно 125 + 125, сейчас', '125 + 125 керек, азыр')}{' '}
-                              <span className="font-semibold text-slate-950">
-                                {item.lines.map((line) => line.available).join(' + ')}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => setSelectedMainSubject((previous) => (previous === item.id ? null : item.id))}
-                              className={`mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-medium transition-colors ${
-                                isSelected
-                                  ? 'border border-slate-200 bg-white text-slate-700 hover:text-slate-950'
-                                  : 'bg-slate-950 text-white hover:bg-slate-800'
-                              }`}
-                            >
-                              {isSelected ? (
-                                <>
-                                  <ArrowLeft className="h-4 w-4" />
-                                  {localizeUi(student?.language, 'Скрыть выбор теста', 'Тест тандоосун жашыруу')}
-                                </>
-                              ) : (
-                                <>
-                                  <Play className="h-4 w-4" />
-                                  {localizeUi(student?.language, 'Выбрать предмет', 'Предметти тандоо')}
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        {isSelected && (
-                          <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5">
-                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                              <div className="space-y-3">
-                                <div className="flex flex-wrap items-center gap-3">
-                                  <h3 className="text-xl font-semibold text-slate-950">{mainWindowLabel}</h3>
-                                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
-                                    {item.title}
-                                  </span>
-                                </div>
-                                <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                                  {localizeUi(
-                                    student?.language,
-                                    'Этот тест будет собран по выбранному предмету и вашей паре классов.',
-                                    'Бул тест тандалган предмет жана сиздин класстар жуптугуңуз боюнча түзүлөт.',
-                                  )}
-                                </p>
-                              </div>
-
-                              <div className="w-full max-w-sm rounded-[24px] border border-slate-200 bg-white p-4 lg:w-80">
-                                <div className="text-sm text-slate-600">
-                                  {localizeUi(student?.language, 'Нужно 125 + 125, сейчас', '125 + 125 керек, азыр')}{' '}
-                                  <span className="font-semibold text-slate-950">
-                                    {item.lines.map((line) => line.available).join(' + ')}
-                                  </span>
-                                </div>
-                                <button
-                                  onClick={() => handleStartMain(item.id)}
-                                  disabled={!isReady || isBusy}
-                                  className={`mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-medium transition-colors ${
-                                    isReady
-                                      ? 'bg-slate-950 text-white hover:bg-slate-800'
-                                      : 'cursor-not-allowed bg-slate-200 text-slate-500'
-                                  }`}
-                                >
-                                  {isBusy ? (
-                                    <>
-                                      <Clock3 className="h-4 w-4 animate-spin" />
-                                      {localizeUi(student?.language, 'Генерируем', 'Түзүп жатабыз')}
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Play className="h-4 w-4" />
-                                      {isReady
-                                        ? localizeUi(student?.language, 'Начать предметный тест', 'Предметтик тестти баштоо')
-                                        : localizeUi(student?.language, 'Ожидает заполнения', 'Толтурууну күтүп турат')}
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {testType === 'TRIAL' && activeNode && 'rounds' in activeNode && (
-            <div className="grid gap-5">
-              {activeNode.rounds.map((round) => {
-                const isReady = round.status === 'ready';
-                const isBusy = isGenerating === round.id;
-
-                return (
-                  <article
-                    key={round.id}
-                    className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_55px_-30px_rgba(15,23,42,0.28)]"
-                  >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="space-y-5">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <h2 className="text-2xl font-semibold text-slate-950">{round.title}</h2>
-                          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
-                            isReady ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                          }`}>
-                            {isReady ? <CheckCircle2 className="h-3.5 w-3.5" /> : <LockKeyhole className="h-3.5 w-3.5" />}
-                            {isReady
-                              ? localizeUi(student?.language, 'Тур готов', 'Тур даяр')
-                              : localizeUi(student?.language, 'Тур закрыт', 'Тур жабык')}
-                          </span>
-                        </div>
-
-                        <div className="grid gap-4 md:grid-cols-2">
-                          {round.subjects.map((subjectItem) => (
-                            <div
-                              key={subjectItem.id}
-                              className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4"
-                            >
-                              <div className="text-sm font-semibold text-slate-900">{subjectItem.title}</div>
-                              <div className="mt-3 space-y-2 text-sm text-slate-600">
-                                {subjectItem.lines.map((line) => (
-                                  <div
-                                    key={`${subjectItem.id}-${line.grade}`}
-                                    className="rounded-2xl border border-slate-200 bg-white px-3 py-2"
-                                  >
-                                    <div className="font-medium text-slate-900">{line.label}</div>
-                                    <div className="mt-1 text-slate-500">
-                                      {localizeUi(student?.language, 'Сейчас', 'Азыр')} {line.available} / {line.required}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="w-full max-w-sm rounded-[24px] border border-slate-200 bg-slate-50/90 p-4 lg:w-80">
-                        <div className="text-sm text-slate-600">
-                          {localizeUi(student?.language, 'Нужно по веткам, сейчас готово', 'Бутактар боюнча керек, азыр даяр')}{' '}
-                          <span className="font-semibold text-slate-950">{round.available_total}</span> / {round.required_total}
-                        </div>
-                        <button
-                          onClick={() => handleStartTrial(round.id)}
-                          disabled={!isReady || isBusy}
-                          className={`mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-medium transition-colors ${
-                            isReady
-                              ? 'bg-slate-950 text-white hover:bg-slate-800'
-                              : 'cursor-not-allowed bg-slate-200 text-slate-500'
-                          }`}
-                        >
-                          {isBusy ? (
-                            <>
-                              <Clock3 className="h-4 w-4 animate-spin" />
-                              {localizeUi(student?.language, 'Генерируем', 'Түзүп жатабыз')}
-                            </>
-                          ) : (
-                            <>
-                              <Play className="h-4 w-4" />
-                              {isReady
-                                ? localizeUi(student?.language, 'Начать пробный тест', 'Пробный тестти баштоо')
-                                : localizeUi(student?.language, 'Ожидает заполнения', 'Толтурууну күтүп турат')}
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  const totalQuestions = testData.questions.length;
-  const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
-
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.12),_transparent_20%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_100%)] px-4 py-8">
       <div className="mx-auto max-w-5xl">
@@ -558,18 +147,27 @@ export default function TestPage() {
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">
                 <Sparkles className="h-3.5 w-3.5" />
-                {availableData?.branch.title}
+                {testType === 'MAIN' ? localizeUi(student?.language, 'Предметный тест', 'Предметтик тест') : localizeUi(student?.language, 'Пробный тест', 'Пробный тест')}
               </div>
               <h1 className="mt-4 text-3xl font-semibold text-slate-950">
-                {activeNode?.title || localizeUi(student?.language, 'Тест', 'Тест')}
+                {localizeUi(student?.language, 'Вопрос', 'Суроо')} {currentQuestionIndex + 1} / {totalQuestions}
               </h1>
               <p className="mt-2 text-sm text-slate-600">
-                {localizeUi(student?.language, 'Вопрос', 'Суроо')} {currentQuestionIndex + 1} / {totalQuestions}
+                {testType === 'MAIN' ? `Предмет: ${testData.test_info.subject}` : `Тур: ${testData.test_info.round}`}
               </p>
             </div>
 
-            <div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700">
-              {getProgressLabel(answeredCount, totalQuestions, student?.language)}
+            <div className="flex flex-col items-end gap-3">
+              <div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700">
+                {getProgressLabel(answeredCount, totalQuestions, student?.language)}
+              </div>
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                {localizeUi(student?.language, 'Прервать тест', 'Тестти токтотуу')}
+              </button>
             </div>
           </div>
         </header>
@@ -656,20 +254,18 @@ export default function TestPage() {
           </div>
 
           {currentReveal && (
-            <div className={`border-t px-6 py-6 md:px-10 ${
-              currentReveal.is_correct
+            <div className={`border-t px-6 py-6 md:px-10 ${currentReveal.is_correct
                 ? 'border-emerald-200 bg-emerald-50/70'
                 : 'border-amber-200 bg-amber-50/70'
-            }`}>
+              }`}>
               <div className="flex items-center gap-3">
                 {currentReveal.is_correct ? (
                   <CheckCircle2 className="h-6 w-6 text-emerald-600" />
                 ) : (
                   <XCircle className="h-6 w-6 text-rose-600" />
                 )}
-                <div className={`text-sm font-semibold ${
-                  currentReveal.is_correct ? 'text-emerald-700' : 'text-rose-700'
-                }`}>
+                <div className={`text-sm font-semibold ${currentReveal.is_correct ? 'text-emerald-700' : 'text-rose-700'
+                  }`}>
                   {currentReveal.is_correct
                     ? localizeUi(student?.language, 'Правильно', 'Туура')
                     : localizeUi(student?.language, 'Неправильно', 'Туура эмес')}
@@ -708,13 +304,12 @@ export default function TestPage() {
             <div className="flex items-center gap-3">
               {!isLastQuestion && (
                 <button
-                  onClick={() => setCurrentQuestionIndex((previous) => previous + 1)}
+                  onClick={() => setCurrentQuestionIndex((prev) => prev + 1)}
                   disabled={!currentReveal}
-                  className={`inline-flex h-12 items-center justify-center gap-2 rounded-full px-5 text-sm font-medium transition-colors ${
-                    currentReveal
+                  className={`inline-flex h-12 items-center justify-center gap-2 rounded-full px-5 text-sm font-medium transition-colors ${currentReveal
                       ? 'bg-slate-950 text-white hover:bg-slate-800'
                       : 'cursor-not-allowed bg-slate-200 text-slate-500'
-                  }`}
+                    }`}
                 >
                   {localizeUi(student?.language, 'Следующий вопрос', 'Кийинки суроо')}
                   <ArrowRight className="h-4 w-4" />
@@ -725,11 +320,10 @@ export default function TestPage() {
                 <button
                   onClick={handleSubmit}
                   disabled={!currentReveal || isSubmitting}
-                  className={`inline-flex h-12 items-center justify-center gap-2 rounded-full px-5 text-sm font-medium transition-colors ${
-                    currentReveal && !isSubmitting
+                  className={`inline-flex h-12 items-center justify-center gap-2 rounded-full px-5 text-sm font-medium transition-colors ${currentReveal && !isSubmitting
                       ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                       : 'cursor-not-allowed bg-slate-200 text-slate-500'
-                  }`}
+                    }`}
                 >
                   {isSubmitting
                     ? localizeUi(student?.language, 'Отправляем', 'Жөнөтүп жатабыз')
