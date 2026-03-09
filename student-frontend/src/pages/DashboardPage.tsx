@@ -1,4 +1,4 @@
-import { BookOpen, Clock3, FlaskConical, User, GraduationCap, LogOut, ChevronRight } from 'lucide-react';
+import { BookOpen, Clock3, FlaskConical, User, GraduationCap, LogOut, ChevronRight, Languages, Target, BookMarked, Layers } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useEffect, useState } from 'react';
@@ -89,6 +89,49 @@ export default function DashboardPage() {
             <span className="flex items-center gap-2">
               <User className="h-4 w-4" /> {student?.username}
             </span>
+          </div>
+
+          {/* Quick Stats Grid */}
+          <div className="mt-8 sm:mt-10 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            <div className="bg-stone-50 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border-2 border-transparent hover:border-stone-200 hover:bg-stone-100/50 transition-all">
+              <Layers className="h-5 w-5 sm:h-7 sm:w-7 text-stone-400 mb-3 sm:mb-4" />
+              <div className="text-xl sm:text-2xl font-black text-black mb-1">
+                {localizeUi(student?.language, '6 и 7 классы', '6 жана 7 класстар')}
+              </div>
+              <div className="text-[10px] sm:text-xs font-medium text-stone-500">
+                {localizeUi(student?.language, 'Доступно для всех', 'Баарына жеткиликтүү')}
+              </div>
+            </div>
+
+            <div className="bg-stone-50 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border-2 border-transparent hover:border-stone-200 hover:bg-stone-100/50 transition-all">
+              <BookMarked className="h-5 w-5 sm:h-7 sm:w-7 text-stone-400 mb-3 sm:mb-4" />
+              <div className="text-xl sm:text-2xl font-black text-black mb-1">
+                {localizeUi(student?.language, '6 предметов', '6 сабак')}
+              </div>
+              <div className="text-[10px] sm:text-xs font-medium text-stone-500">
+                {localizeUi(student?.language, 'Школьная программа', 'Мектеп программасы')}
+              </div>
+            </div>
+
+            <div className="bg-stone-50 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border-2 border-transparent hover:border-stone-200 hover:bg-stone-100/50 transition-all">
+              <Target className="h-5 w-5 sm:h-7 sm:w-7 text-stone-400 mb-3 sm:mb-4" />
+              <div className="text-xl sm:text-2xl font-black text-black mb-1">
+                {localizeUi(student?.language, '2 формата', '2 формат')}
+              </div>
+              <div className="text-[10px] sm:text-xs font-medium text-stone-500">
+                {localizeUi(student?.language, 'Основной и Пробный', 'Негизги жана Сынамык')}
+              </div>
+            </div>
+
+            <div className="bg-stone-50 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border-2 border-transparent hover:border-stone-200 hover:bg-stone-100/50 transition-all">
+              <Languages className="h-5 w-5 sm:h-7 sm:w-7 text-stone-400 mb-3 sm:mb-4" />
+              <div className="text-xl sm:text-2xl font-black text-black mb-1">
+                {localizeUi(student?.language, '2 языка', '2 тил')}
+              </div>
+              <div className="text-[10px] sm:text-xs font-medium text-stone-500">
+                {localizeUi(student?.language, 'Русский и Кыргызский', 'Орусча жана Кыргызча')}
+              </div>
+            </div>
           </div>
         </div>
 
