@@ -73,15 +73,11 @@ export default function TestPage() {
     screenshotProcessingRef.current = true;
     setTabSwitchCount((prev) => prev + 1);
 
-    // Сначала сразу показываем предупреждение, не дожидаясь ответа сервера
-    setScreenshotModal({ type: 'warning', strikes: 1 });
-
-    // Потом обновляем с реальными данными с сервера
     try {
       const result = await reportScreenshotViolation(token);
       setScreenshotModal({ type: result.action, strikes: result.strikes });
     } catch {
-      // Модалка уже на экране — оставляем warning
+      setScreenshotModal({ type: 'warning', strikes: 1 });
     }
   }, [token]);
 
