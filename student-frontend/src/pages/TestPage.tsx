@@ -78,24 +78,6 @@ export default function TestPage() {
     }
   }, []);
 
-  const triggerSecurityOverlay = useCallback((persistUntilResume = true) => {
-    clearScreenRestoreTimer();
-    setScreenBlacked(true);
-
-    if (!persistUntilResume) {
-      screenRestoreTimerRef.current = window.setTimeout(() => {
-        setScreenBlacked(false);
-        screenRestoreTimerRef.current = null;
-      }, 1500);
-    }
-  }, [clearScreenRestoreTimer]);
-
-  const registerSecurityViolation = useCallback((persistUntilResume = true) => {
-    triggerSecurityOverlay(persistUntilResume);
-    setTabSwitchCount((prev) => prev + 1);
-    setTabSwitchWarning(true);
-  }, [triggerSecurityOverlay]);
-
   const handleScreenshotViolation = useCallback(async () => {
     if (screenshotProcessingRef.current || !token) return;
     screenshotProcessingRef.current = true;
