@@ -73,11 +73,15 @@ export default function TestPage() {
     screenshotProcessingRef.current = true;
     setTabSwitchCount((prev) => prev + 1);
 
+    // Сначала сразу показываем предупреждение, не дожидаясь ответа сервера
+    setScreenshotModal({ type: 'warning', strikes: 1 });
+
+    // Потом обновляем с реальными данными с сервера
     try {
       const result = await reportScreenshotViolation(token);
       setScreenshotModal({ type: result.action, strikes: result.strikes });
     } catch {
-      setScreenshotModal({ type: 'warning', strikes: 1 });
+      // Модалка уже на экране — оставляем warning
     }
   }, [token]);
 
@@ -126,19 +130,9 @@ export default function TestPage() {
       if (isTrial && e.key === 'Escape') e.preventDefault();
     };
 
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        handleScreenshotViolation();
-      }
-    };
-
-    const handleBlur = () => {
-      handleScreenshotViolation();
-    };
-
-    const handlePageHide = () => {
-      handleScreenshotViolation();
-    };
+    const handleVisibilityChange = () => {};
+    const handleBlur = () => {};
+    const handlePageHide = () => {};
 
     // Mobile: block long-press context menu via touch
     let longPressTimer: ReturnType<typeof setTimeout> | null = null;
