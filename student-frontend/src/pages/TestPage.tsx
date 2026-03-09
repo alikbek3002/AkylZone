@@ -23,7 +23,6 @@ export default function TestPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const containerRef = useRef<HTMLDivElement>(null);
-  const screenRestoreTimerRef = useRef<number | null>(null);
 
   const testData = location.state?.testData as GeneratedTestResponse | undefined;
 
@@ -39,7 +38,6 @@ export default function TestPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
-  const [screenBlacked, setScreenBlacked] = useState(false);
 
   const [screenshotModal, setScreenshotModal] = useState<{
     type: 'warning' | 'blocked_48h' | 'blocked_permanent';
@@ -70,17 +68,9 @@ export default function TestPage() {
     } catch { /* ignore */ }
   }, []);
 
-  const clearScreenRestoreTimer = useCallback(() => {
-    if (screenRestoreTimerRef.current !== null) {
-      window.clearTimeout(screenRestoreTimerRef.current);
-      screenRestoreTimerRef.current = null;
-    }
-  }, []);
-
   const handleScreenshotViolation = useCallback(async () => {
     if (screenshotProcessingRef.current || !token) return;
     screenshotProcessingRef.current = true;
-    setScreenBlacked(true);
     setTabSwitchCount((prev) => prev + 1);
 
     try {
@@ -106,14 +96,18 @@ export default function TestPage() {
       const normalizedKey = e.key.toLowerCase();
       const normalizedCode = e.code.toLowerCase();
       const isPrimaryModifierPressed = e.ctrlKey || e.metaKey;
+      
       const isScreenshotShortcut =
         e.key === 'PrintScreen' ||
         e.code === 'PrintScreen' ||
         e.key === 'Snapshot' ||
         e.code === 'Snapshot' ||
-        (e.metaKey && e.shiftKey && ['digit3', 'digit4', 'digit5'].includes(normalizedCode));
+        (e.metaKey && e.shiftKey && ['3', '4', '5', 's'].includes(normalizedKey)) ||
+        (e.metaKey && e.shiftKey && ['digit3', 'digit4', 'digit5', 'keys'].includes(normalizedCode)) ||
+        (e.metaKey && e.shiftKey && [51, 52, 53].includes(e.keyCode)) ||
+        (e.metaKey && e.altKey && e.shiftKey); // Extended Mac combinations
 
-      if (isPrimaryModifierPressed && ['c', 'v', 'x', 'p', 's', 'a', 'u'].includes(normalizedKey)) {
+      if (isPrimaryModifierPressed && ['c', 'v', 'x', 'p', 'a', 'u'].includes(normalizedKey)) {
         e.preventDefault();
       }
 
@@ -134,18 +128,16 @@ export default function TestPage() {
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        setScreenBlacked(true);
         handleScreenshotViolation();
       }
     };
 
     const handleBlur = () => {
-      setScreenBlacked(true);
       handleScreenshotViolation();
     };
 
     const handlePageHide = () => {
-      setScreenBlacked(true);
+      handleScreenshotViolation();
     };
 
     // Mobile: block long-press context menu via touch
@@ -169,6 +161,7 @@ export default function TestPage() {
     document.addEventListener('selectstart', preventEvent, true);
     document.addEventListener('dragstart', preventEvent, true);
     document.addEventListener('keydown', preventShortcuts, true);
+    document.addEventListener('keyup', preventShortcuts, true);
     document.addEventListener('visibilitychange', handleVisibilityChange, true);
     window.addEventListener('blur', handleBlur, true);
     window.addEventListener('pagehide', handlePageHide, true);
@@ -201,7 +194,6 @@ export default function TestPage() {
     }
 
     return () => {
-      clearScreenRestoreTimer();
       document.removeEventListener('copy', preventEvent, true);
       document.removeEventListener('cut', preventEvent, true);
       document.removeEventListener('paste', preventEvent, true);
@@ -209,6 +201,7 @@ export default function TestPage() {
       document.removeEventListener('selectstart', preventEvent, true);
       document.removeEventListener('dragstart', preventEvent, true);
       document.removeEventListener('keydown', preventShortcuts, true);
+      document.removeEventListener('keyup', preventShortcuts, true);
       document.removeEventListener('visibilitychange', handleVisibilityChange, true);
       window.removeEventListener('blur', handleBlur, true);
       window.removeEventListener('pagehide', handlePageHide, true);
@@ -218,7 +211,7 @@ export default function TestPage() {
       document.removeEventListener('touchmove', handleTouchMove);
       cleanupTrial?.();
     };
-  }, [clearScreenRestoreTimer, isTrial, enterFullscreen, handleScreenshotViolation]);
+  }, [isTrial, enterFullscreen, handleScreenshotViolation]);
 
   // Fullscreen state tracking (TRIAL only)
   useEffect(() => {
@@ -293,7 +286,6 @@ export default function TestPage() {
   };
 
   const handleExitTest = () => {
-    setScreenBlacked(false);
     setShowExitConfirm(false);
     exitFullscreen();
     navigate('/dashboard');
@@ -383,8 +375,8 @@ export default function TestPage() {
     >
       {/* Exit confirmation for MAIN test */}
       {showExitConfirm && !isTrial && (
-        <div className="fixed inset-0 z-[10006] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="mx-4 max-w-sm rounded-3xl bg-white p-6 sm:p-8 text-center shadow-2xl">
+        <div className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="mx-4 max-w-sm rounded-3xl bg-white p-6 sm:p-8 text-center shadow-2xl relative z-[20001]">
             <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-600">
               <LogOut className="h-7 w-7" />
             </div>
@@ -412,11 +404,6 @@ export default function TestPage() {
         </div>
       )}
 
-      {/* Screenshot blackout overlay */}
-      {screenBlacked && (
-        <div className="fixed inset-0 z-[10003] bg-black" />
-      )}
-
       {/* Screenshot violation modal */}
       {screenshotModal && (
         <div className="fixed inset-0 z-[10005] flex items-center justify-center bg-black/90 backdrop-blur-md">
@@ -440,7 +427,6 @@ export default function TestPage() {
                   onClick={() => {
                     screenshotProcessingRef.current = false;
                     setScreenshotModal(null);
-                    setScreenBlacked(false);
                     logout();
                     navigate('/login', { replace: true });
                   }}
@@ -469,7 +455,6 @@ export default function TestPage() {
                   onClick={() => {
                     screenshotProcessingRef.current = false;
                     setScreenshotModal(null);
-                    setScreenBlacked(false);
                     logout();
                     navigate('/login', { replace: true });
                   }}
@@ -498,7 +483,6 @@ export default function TestPage() {
                   onClick={() => {
                     screenshotProcessingRef.current = false;
                     setScreenshotModal(null);
-                    setScreenBlacked(false);
                     logout();
                     navigate('/login', { replace: true });
                   }}
