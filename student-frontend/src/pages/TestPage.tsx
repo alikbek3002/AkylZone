@@ -37,6 +37,7 @@ export default function TestPage() {
   const [tabSwitchWarning, setTabSwitchWarning] = useState(false);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [screenBlacked, setScreenBlacked] = useState(false);
 
   const enterFullscreen = useCallback(async () => {
     try {
@@ -94,12 +95,16 @@ export default function TestPage() {
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
+        setScreenBlacked(true);
         setTabSwitchCount((prev) => prev + 1);
         setTabSwitchWarning(true);
+      } else {
+        setTimeout(() => setScreenBlacked(false), 500);
       }
     };
 
     const handleBlur = () => {
+      setScreenBlacked(true);
       setTabSwitchCount((prev) => prev + 1);
       setTabSwitchWarning(true);
     };
@@ -382,7 +387,7 @@ export default function TestPage() {
               {localizeUi(student?.language, `Переключений: ${tabSwitchCount}`, `Өтүүлөр: ${tabSwitchCount}`)}
             </p>
             <button
-              onClick={() => { setTabSwitchWarning(false); if (isTrial) enterFullscreen(); }}
+              onClick={() => { setTabSwitchWarning(false); setScreenBlacked(false); if (isTrial) enterFullscreen(); }}
               className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-medium text-white hover:bg-slate-800 transition-colors"
             >
               {localizeUi(student?.language, 'Продолжить тест', 'Тестти улантуу')}
@@ -390,6 +395,25 @@ export default function TestPage() {
           </div>
         </div>
       )}
+
+      {/* Screenshot blackout overlay */}
+      {screenBlacked && (
+        <div className="fixed inset-0 z-[10003] bg-black" />
+      )}
+
+      {/* Watermark overlay */}
+      <div
+        className="pointer-events-none fixed inset-0 z-[9998] overflow-hidden opacity-[0.03]"
+        aria-hidden="true"
+      >
+        <div className="flex flex-wrap gap-16 p-8 -rotate-12 scale-125 origin-center">
+          {Array.from({ length: 60 }).map((_, i) => (
+            <span key={i} className="whitespace-nowrap text-sm font-bold text-black">
+              {student?.fullName} · {student?.username}
+            </span>
+          ))}
+        </div>
+      </div>
 
       {/* TRIAL: Fullscreen prompt */}
       {isTrial && !isFullscreen && !tabSwitchWarning && (
@@ -475,14 +499,6 @@ export default function TestPage() {
 
         {/* Question card */}
         <main className="overflow-hidden rounded-2xl sm:rounded-3xl border-2 border-stone-200 bg-white">
-          {currentQuestion?.topic && (
-            <div className="border-b border-stone-100 px-4 pt-4 sm:px-6 sm:pt-5">
-              <span className="inline-flex items-center rounded-full border border-stone-200 px-2.5 py-1 text-[10px] sm:text-xs font-bold text-stone-500 uppercase tracking-wider">
-                {currentQuestion.topic}
-              </span>
-            </div>
-          )}
-
           {currentQuestion?.imageUrl && (
             <div className="border-b border-stone-100 px-4 pt-4 sm:px-6 sm:pt-5">
               <img
