@@ -21,6 +21,7 @@ export default function TestPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const containerRef = useRef<HTMLDivElement>(null);
+  const screenRestoreTimerRef = useRef<number | null>(null);
 
   const testData = location.state?.testData as GeneratedTestResponse | undefined;
 
@@ -62,6 +63,31 @@ export default function TestPage() {
     } catch { /* ignore */ }
   }, []);
 
+  const clearScreenRestoreTimer = useCallback(() => {
+    if (screenRestoreTimerRef.current !== null) {
+      window.clearTimeout(screenRestoreTimerRef.current);
+      screenRestoreTimerRef.current = null;
+    }
+  }, []);
+
+  const triggerSecurityOverlay = useCallback((persistUntilResume = true) => {
+    clearScreenRestoreTimer();
+    setScreenBlacked(true);
+
+    if (!persistUntilResume) {
+      screenRestoreTimerRef.current = window.setTimeout(() => {
+        setScreenBlacked(false);
+        screenRestoreTimerRef.current = null;
+      }, 1500);
+    }
+  }, [clearScreenRestoreTimer]);
+
+  const registerSecurityViolation = useCallback((persistUntilResume = true) => {
+    triggerSecurityOverlay(persistUntilResume);
+    setTabSwitchCount((prev) => prev + 1);
+    setTabSwitchWarning(true);
+  }, [triggerSecurityOverlay]);
+
   if (!testData) {
     return <Navigate to="/dashboard" replace />;
   }
@@ -74,20 +100,29 @@ export default function TestPage() {
     const preventEvent = (e: Event) => { e.preventDefault(); };
 
     const preventShortcuts = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'x', 'p', 's', 'a', 'u'].includes(e.key.toLowerCase())) {
+      const normalizedKey = e.key.toLowerCase();
+      const normalizedCode = e.code.toLowerCase();
+      const isPrimaryModifierPressed = e.ctrlKey || e.metaKey;
+      const isScreenshotShortcut =
+        e.key === 'PrintScreen' ||
+        e.code === 'PrintScreen' ||
+        e.key === 'Snapshot' ||
+        e.code === 'Snapshot' ||
+        (e.metaKey && e.shiftKey && ['digit3', 'digit4', 'digit5'].includes(normalizedCode));
+
+      if (isPrimaryModifierPressed && ['c', 'v', 'x', 'p', 's', 'a', 'u'].includes(normalizedKey)) {
         e.preventDefault();
       }
-      if (e.key === 'PrintScreen' || e.key === 'Snapshot') {
+
+      if (isScreenshotShortcut) {
         e.preventDefault();
+        registerSecurityViolation(false);
         navigator.clipboard?.writeText('').catch(() => {});
       }
+
       if (e.key === 'F12') e.preventDefault();
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase())) {
+      if (isPrimaryModifierPressed && e.shiftKey && ['i', 'j', 'c'].includes(normalizedKey)) {
         e.preventDefault();
-      }
-      if (e.metaKey && e.shiftKey && ['3', '4', '5'].includes(e.key)) {
-        e.preventDefault();
-        navigator.clipboard?.writeText('').catch(() => {});
       }
       if (e.altKey && e.key === 'Tab') e.preventDefault();
       if (isTrial && e.key === 'Escape') e.preventDefault();
@@ -95,18 +130,16 @@ export default function TestPage() {
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        setScreenBlacked(true);
-        setTabSwitchCount((prev) => prev + 1);
-        setTabSwitchWarning(true);
-      } else {
-        setTimeout(() => setScreenBlacked(false), 500);
+        registerSecurityViolation();
       }
     };
 
     const handleBlur = () => {
-      setScreenBlacked(true);
-      setTabSwitchCount((prev) => prev + 1);
-      setTabSwitchWarning(true);
+      registerSecurityViolation();
+    };
+
+    const handlePageHide = () => {
+      registerSecurityViolation();
     };
 
     // Mobile: block long-press context menu via touch
@@ -123,15 +156,17 @@ export default function TestPage() {
       if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     };
 
-    document.addEventListener('copy', preventEvent);
-    document.addEventListener('cut', preventEvent);
-    document.addEventListener('paste', preventEvent);
-    document.addEventListener('contextmenu', preventEvent);
-    document.addEventListener('selectstart', preventEvent);
-    document.addEventListener('dragstart', preventEvent);
-    document.addEventListener('keydown', preventShortcuts);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleBlur);
+    document.addEventListener('copy', preventEvent, true);
+    document.addEventListener('cut', preventEvent, true);
+    document.addEventListener('paste', preventEvent, true);
+    document.addEventListener('contextmenu', preventEvent, true);
+    document.addEventListener('selectstart', preventEvent, true);
+    document.addEventListener('dragstart', preventEvent, true);
+    document.addEventListener('keydown', preventShortcuts, true);
+    document.addEventListener('visibilitychange', handleVisibilityChange, true);
+    window.addEventListener('blur', handleBlur, true);
+    window.addEventListener('pagehide', handlePageHide, true);
+    document.addEventListener('freeze', handlePageHide as EventListener, true);
     document.addEventListener('touchstart', handleTouchStart, { passive: false });
     document.addEventListener('touchend', handleTouchEnd);
     document.addEventListener('touchmove', handleTouchMove);
@@ -160,21 +195,24 @@ export default function TestPage() {
     }
 
     return () => {
-      document.removeEventListener('copy', preventEvent);
-      document.removeEventListener('cut', preventEvent);
-      document.removeEventListener('paste', preventEvent);
-      document.removeEventListener('contextmenu', preventEvent);
-      document.removeEventListener('selectstart', preventEvent);
-      document.removeEventListener('dragstart', preventEvent);
-      document.removeEventListener('keydown', preventShortcuts);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleBlur);
+      clearScreenRestoreTimer();
+      document.removeEventListener('copy', preventEvent, true);
+      document.removeEventListener('cut', preventEvent, true);
+      document.removeEventListener('paste', preventEvent, true);
+      document.removeEventListener('contextmenu', preventEvent, true);
+      document.removeEventListener('selectstart', preventEvent, true);
+      document.removeEventListener('dragstart', preventEvent, true);
+      document.removeEventListener('keydown', preventShortcuts, true);
+      document.removeEventListener('visibilitychange', handleVisibilityChange, true);
+      window.removeEventListener('blur', handleBlur, true);
+      window.removeEventListener('pagehide', handlePageHide, true);
+      document.removeEventListener('freeze', handlePageHide as EventListener, true);
       document.removeEventListener('touchstart', handleTouchStart);
       document.removeEventListener('touchend', handleTouchEnd);
       document.removeEventListener('touchmove', handleTouchMove);
       cleanupTrial?.();
     };
-  }, [isTrial, enterFullscreen]);
+  }, [clearScreenRestoreTimer, isTrial, enterFullscreen, registerSecurityViolation]);
 
   // Fullscreen state tracking (TRIAL only)
   useEffect(() => {
@@ -368,7 +406,7 @@ export default function TestPage() {
 
       {/* Tab switch warning */}
       {tabSwitchWarning && (
-        <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[10004] flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="mx-4 max-w-md rounded-3xl bg-white p-8 text-center shadow-2xl">
             <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-600">
               <AlertTriangle className="h-7 w-7" />
@@ -387,7 +425,7 @@ export default function TestPage() {
               {localizeUi(student?.language, `Переключений: ${tabSwitchCount}`, `Өтүүлөр: ${tabSwitchCount}`)}
             </p>
             <button
-              onClick={() => { setTabSwitchWarning(false); setScreenBlacked(false); if (isTrial) enterFullscreen(); }}
+              onClick={() => { clearScreenRestoreTimer(); setTabSwitchWarning(false); setScreenBlacked(false); if (isTrial) enterFullscreen(); }}
               className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-medium text-white hover:bg-slate-800 transition-colors"
             >
               {localizeUi(student?.language, 'Продолжить тест', 'Тестти улантуу')}
@@ -403,15 +441,28 @@ export default function TestPage() {
 
       {/* Watermark overlay */}
       <div
-        className="pointer-events-none fixed inset-0 z-[9998] overflow-hidden opacity-[0.03]"
+        className="pointer-events-none fixed inset-0 z-[9998] overflow-hidden"
         aria-hidden="true"
+        style={{ opacity: 0.06 }}
       >
-        <div className="flex flex-wrap gap-16 p-8 -rotate-12 scale-125 origin-center">
-          {Array.from({ length: 60 }).map((_, i) => (
-            <span key={i} className="whitespace-nowrap text-sm font-bold text-black">
-              {student?.fullName} · {student?.username}
-            </span>
-          ))}
+        <div className="absolute inset-0 -rotate-[25deg] scale-150 origin-center">
+          <div className="flex flex-col items-center justify-center gap-12 pt-8">
+            {Array.from({ length: 6 }).map((_, row) => (
+              <div key={row} className="flex items-center gap-16" style={{ marginLeft: row % 2 === 0 ? 0 : -80 }}>
+                {Array.from({ length: 5 }).map((_, col) => (
+                  <svg key={col} width="200" height="160" viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <text x="100" y="110" textAnchor="middle" fontFamily="Arial, sans-serif" fontWeight="900" fontSize="120" fill="#000" letterSpacing="-4">
+                      AZ
+                    </text>
+                    <path d="M60 30 Q100 10 140 30" stroke="#dc2626" strokeWidth="6" fill="none" strokeLinecap="round" />
+                    <path d="M130 25 L140 30 L132 37" stroke="#dc2626" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M60 130 Q100 150 140 130" stroke="#dc2626" strokeWidth="6" fill="none" strokeLinecap="round" />
+                    <path d="M70 135 L60 130 L68 123" stroke="#dc2626" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
