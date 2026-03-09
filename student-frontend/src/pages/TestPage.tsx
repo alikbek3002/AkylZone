@@ -404,7 +404,7 @@ export default function TestPage() {
           <div className="mx-4 max-w-md rounded-3xl bg-white p-8 text-center shadow-2xl">
             {screenshotModal.type === 'warning' && (
               <>
-                <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600">
+                <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600">
                   <ShieldAlert className="h-8 w-8" />
                 </div>
                 <h3 className="mt-4 text-xl font-bold text-slate-900">
@@ -421,12 +421,10 @@ export default function TestPage() {
                   onClick={() => {
                     screenshotProcessingRef.current = false;
                     setScreenshotModal(null);
-                    logout();
-                    navigate('/login', { replace: true });
                   }}
-                  className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-red-600 px-8 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                  className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-8 text-sm font-medium text-white hover:bg-slate-800 transition-colors"
                 >
-                  {localizeUi(student?.language, 'Понятно', 'Түшүндүм')}
+                  {localizeUi(student?.language, 'Продолжить тест', 'Тестти улантуу')}
                 </button>
               </>
             )}

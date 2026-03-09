@@ -738,11 +738,11 @@ router.post('/screenshot-violation', async (req, res) => {
     const currentStrikes = (student.screenshot_strikes || 0) + 1;
 
     let action = 'warning';
-    if (currentStrikes === 1) {
+    if (currentStrikes <= 1) {
       action = 'warning';
     } else if (currentStrikes === 2) {
       action = 'blocked_48h';
-    } else if (currentStrikes >= 3) {
+    } else {
       action = 'blocked_permanent';
     }
 
