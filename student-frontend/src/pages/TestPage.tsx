@@ -94,34 +94,34 @@ export default function TestPage() {
 
     const preventShortcuts = (e: KeyboardEvent) => {
       const normalizedKey = e.key.toLowerCase();
-      const normalizedCode = e.code.toLowerCase();
       const isPrimaryModifierPressed = e.ctrlKey || e.metaKey;
-      
-      const isScreenshotShortcut =
-        e.key === 'PrintScreen' ||
-        e.code === 'PrintScreen' ||
-        e.key === 'Snapshot' ||
-        e.code === 'Snapshot' ||
-        (e.metaKey && e.shiftKey && ['3', '4', '5', 's'].includes(normalizedKey)) ||
-        (e.metaKey && e.shiftKey && ['digit3', 'digit4', 'digit5', 'keys'].includes(normalizedCode)) ||
-        (e.metaKey && e.shiftKey && [51, 52, 53].includes(e.keyCode)) ||
-        (e.metaKey && e.altKey && e.shiftKey); // Extended Mac combinations
 
-      if (isPrimaryModifierPressed && ['c', 'v', 'x', 'p', 'a', 'u'].includes(normalizedKey)) {
-        e.preventDefault();
-      }
-
-      if (isScreenshotShortcut) {
+      if (e.key === 'PrintScreen' || e.code === 'PrintScreen' || e.key === 'Snapshot' || e.code === 'Snapshot') {
         e.preventDefault();
         navigator.clipboard?.writeText('').catch(() => {});
         handleScreenshotViolation();
         return;
       }
 
-      if (e.key === 'F12') e.preventDefault();
-      if (isPrimaryModifierPressed && e.shiftKey && ['i', 'j', 'c'].includes(normalizedKey)) {
+      // Mac: Cmd+Shift зажаты вместе — сразу страйк, не ждём третью клавишу (3/4/5)
+      if (e.metaKey && e.shiftKey) {
+        e.preventDefault();
+        handleScreenshotViolation();
+        return;
+      }
+
+      // Windows: Ctrl+Shift — тоже блокируем (Snipping Tool и т.п.)
+      if (e.ctrlKey && e.shiftKey && normalizedKey === 's') {
+        e.preventDefault();
+        handleScreenshotViolation();
+        return;
+      }
+
+      if (isPrimaryModifierPressed && ['c', 'v', 'x', 'p', 'a', 'u'].includes(normalizedKey)) {
         e.preventDefault();
       }
+
+      if (e.key === 'F12') e.preventDefault();
       if (e.altKey && e.key === 'Tab') e.preventDefault();
       if (isTrial && e.key === 'Escape') e.preventDefault();
     };
