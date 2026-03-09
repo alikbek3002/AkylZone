@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowRight, ArrowLeft, CheckCircle2, XCircle, Maximize, AlertTriangle, Shield, LogOut, ShieldAlert, Ban } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle2, XCircle, Maximize, Shield, LogOut, ShieldAlert, Ban } from 'lucide-react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import logo from '../assets/logo.jpg';
@@ -37,7 +37,6 @@ export default function TestPage() {
   const [apiError, setApiError] = useState<string | null>(null);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [tabSwitchWarning, setTabSwitchWarning] = useState(false);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [screenBlacked, setScreenBlacked] = useState(false);
@@ -82,6 +81,7 @@ export default function TestPage() {
     if (screenshotProcessingRef.current || !token) return;
     screenshotProcessingRef.current = true;
     setScreenBlacked(true);
+    setTabSwitchCount((prev) => prev + 1);
 
     try {
       const result = await reportScreenshotViolation(token);
@@ -134,16 +134,14 @@ export default function TestPage() {
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        setTabSwitchCount((prev) => prev + 1);
-        setTabSwitchWarning(true);
         setScreenBlacked(true);
+        handleScreenshotViolation();
       }
     };
 
     const handleBlur = () => {
-      setTabSwitchCount((prev) => prev + 1);
-      setTabSwitchWarning(true);
       setScreenBlacked(true);
+      handleScreenshotViolation();
     };
 
     const handlePageHide = () => {
@@ -295,6 +293,8 @@ export default function TestPage() {
   };
 
   const handleExitTest = () => {
+    setScreenBlacked(false);
+    setShowExitConfirm(false);
     exitFullscreen();
     navigate('/dashboard');
   };
@@ -383,7 +383,7 @@ export default function TestPage() {
     >
       {/* Exit confirmation for MAIN test */}
       {showExitConfirm && !isTrial && (
-        <div className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[10006] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="mx-4 max-w-sm rounded-3xl bg-white p-6 sm:p-8 text-center shadow-2xl">
             <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-600">
               <LogOut className="h-7 w-7" />
@@ -408,36 +408,6 @@ export default function TestPage() {
                 {localizeUi(student?.language, 'Выйти', 'Чыгуу')}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tab switch warning */}
-      {tabSwitchWarning && (
-        <div className="fixed inset-0 z-[10004] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="mx-4 max-w-md rounded-3xl bg-white p-8 text-center shadow-2xl">
-            <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-600">
-              <AlertTriangle className="h-7 w-7" />
-            </div>
-            <h3 className="mt-4 text-xl font-bold text-slate-900">
-              {localizeUi(student?.language, 'Внимание!', 'Көңүл буруңуз!')}
-            </h3>
-            <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-              {localizeUi(
-                student?.language,
-                'Вы покинули окно теста. Это было зафиксировано. Не переключайтесь на другие вкладки и приложения во время теста.',
-                'Сиз тест терезесинен чыктыңыз. Бул жазылды. Тест учурунда башка өтмөктөргө жана колдонмолорго өтпөңүз.',
-              )}
-            </p>
-            <p className="mt-2 text-xs text-amber-600 font-medium">
-              {localizeUi(student?.language, `Переключений: ${tabSwitchCount}`, `Өтүүлөр: ${tabSwitchCount}`)}
-            </p>
-            <button
-              onClick={() => { clearScreenRestoreTimer(); setTabSwitchWarning(false); setScreenBlacked(false); if (isTrial) enterFullscreen(); }}
-              className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-medium text-white hover:bg-slate-800 transition-colors"
-            >
-              {localizeUi(student?.language, 'Продолжить тест', 'Тестти улантуу')}
-            </button>
           </div>
         </div>
       )}
@@ -564,7 +534,7 @@ export default function TestPage() {
       </svg>
 
       {/* TRIAL: Fullscreen prompt */}
-      {isTrial && !isFullscreen && !tabSwitchWarning && (
+      {isTrial && !isFullscreen && !screenshotModal && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="mx-4 max-w-md rounded-3xl bg-white p-8 text-center shadow-2xl">
             <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-sky-100 text-sky-600">
