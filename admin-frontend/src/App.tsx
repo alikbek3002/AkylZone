@@ -3,6 +3,7 @@ import AdminLogin from "./pages/Login";
 import AdminLayout from "./components/layout/AdminLayout";
 import StudentsPage from "./pages/Dashboard/Students";
 import TestsPage from "./pages/Dashboard/Tests";
+import BlockedStudentsPage from "./pages/Dashboard/BlockedStudents";
 import { useAdminAuthStore } from "./store/authStore";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -33,6 +34,7 @@ function App() {
           <Route index element={<Navigate to="students" replace />} />
           <Route path="students" element={<StudentsPage />} />
           <Route path="tests" element={<TestsPage />} />
+          <Route path="blocked" element={<BlockedStudentsPage />} />
         </Route>
       </Routes>
     </Router>

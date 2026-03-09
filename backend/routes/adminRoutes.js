@@ -441,6 +441,82 @@ router.delete('/students/:id', requireAdmin, async (req, res) => {
   }
 });
 
+router.get('/blocked-students', requireAdmin, async (req, res) => {
+  try {
+    const now = new Date().toISOString();
+
+    const { data: permanentlyBlocked, error: permError } = await supabase
+      .from('students')
+      .select('id, full_name, grade, language, username, plain_password, created_at, screenshot_strikes, blocked_until, blocked_permanently')
+      .eq('blocked_permanently', true)
+      .order('created_at', { ascending: false });
+
+    if (permError) {
+      console.error('Fetch permanently blocked students failed:', permError);
+      return res.status(500).json({ error: 'Failed to fetch blocked students' });
+    }
+
+    const { data: tempBlocked, error: tempError } = await supabase
+      .from('students')
+      .select('id, full_name, grade, language, username, plain_password, created_at, screenshot_strikes, blocked_until, blocked_permanently')
+      .gt('blocked_until', now)
+      .or('blocked_permanently.is.null,blocked_permanently.eq.false')
+      .order('created_at', { ascending: false });
+
+    if (tempError) {
+      console.error('Fetch temp blocked students failed:', tempError);
+      return res.status(500).json({ error: 'Failed to fetch blocked students' });
+    }
+
+    const seen = new Set();
+    const allBlocked = [];
+    for (const s of [...(permanentlyBlocked || []), ...(tempBlocked || [])]) {
+      if (!seen.has(s.id)) {
+        seen.add(s.id);
+        allBlocked.push({
+          ...formatStudent(s),
+          screenshotStrikes: s.screenshot_strikes || 0,
+          blockedUntil: s.blocked_until || null,
+          blockedPermanently: s.blocked_permanently || false,
+        });
+      }
+    }
+
+    return res.json({ students: allBlocked });
+  } catch (error) {
+    console.error('Get blocked students error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/unblock-student/:id', requireAdmin, async (req, res) => {
+  try {
+    const studentId = String(req.params.id || '').trim();
+    if (!studentId) {
+      return res.status(400).json({ error: 'Student ID is required' });
+    }
+
+    const { error } = await supabase
+      .from('students')
+      .update({
+        blocked_until: null,
+        blocked_permanently: false,
+        screenshot_strikes: 0,
+      })
+      .eq('id', studentId);
+
+    if (error) {
+      console.error('Unblock student failed:', error);
+      return res.status(500).json({ error: 'Failed to unblock student' });
+    }
+
+    return res.json({ message: 'Student unblocked successfully' });
+  } catch (error) {
+    console.error('Unblock student error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/stats', requireAdmin, async (req, res) => {
   try {
     const studentsCountPromise = supabase

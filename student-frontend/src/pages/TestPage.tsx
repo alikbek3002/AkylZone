@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowRight, ArrowLeft, CheckCircle2, XCircle, Maximize, AlertTriangle, Shield, LogOut } from 'lucide-react';
+import { ArrowRight, ArrowLeft, CheckCircle2, XCircle, Maximize, AlertTriangle, Shield, LogOut, ShieldAlert, Ban } from 'lucide-react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import logo from '../assets/logo.jpg';
 import {
   answerStudentQuestion,
   submitStudentTest,
+  reportScreenshotViolation,
   type AnswerQuestionResponse,
   type GeneratedTestResponse,
   type SubmitTestResponse,
@@ -17,7 +19,7 @@ function localizeUi(language: 'ru' | 'kg' | undefined, ruText: string, kgText: s
 type RevealState = Record<string, AnswerQuestionResponse>;
 
 export default function TestPage() {
-  const { student, token } = useAuthStore();
+  const { student, token, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -39,6 +41,12 @@ export default function TestPage() {
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [screenBlacked, setScreenBlacked] = useState(false);
+
+  const [screenshotModal, setScreenshotModal] = useState<{
+    type: 'warning' | 'blocked_48h' | 'blocked_permanent';
+    strikes: number;
+  } | null>(null);
+  const screenshotProcessingRef = useRef(false);
 
   const enterFullscreen = useCallback(async () => {
     try {
@@ -88,6 +96,19 @@ export default function TestPage() {
     setTabSwitchWarning(true);
   }, [triggerSecurityOverlay]);
 
+  const handleScreenshotViolation = useCallback(async () => {
+    if (screenshotProcessingRef.current || !token) return;
+    screenshotProcessingRef.current = true;
+    setScreenBlacked(true);
+
+    try {
+      const result = await reportScreenshotViolation(token);
+      setScreenshotModal({ type: result.action, strikes: result.strikes });
+    } catch {
+      setScreenshotModal({ type: 'warning', strikes: 1 });
+    }
+  }, [token]);
+
   if (!testData) {
     return <Navigate to="/dashboard" replace />;
   }
@@ -116,8 +137,9 @@ export default function TestPage() {
 
       if (isScreenshotShortcut) {
         e.preventDefault();
-        registerSecurityViolation(false);
         navigator.clipboard?.writeText('').catch(() => {});
+        handleScreenshotViolation();
+        return;
       }
 
       if (e.key === 'F12') e.preventDefault();
@@ -130,16 +152,20 @@ export default function TestPage() {
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        registerSecurityViolation();
+        setTabSwitchCount((prev) => prev + 1);
+        setTabSwitchWarning(true);
+        setScreenBlacked(true);
       }
     };
 
     const handleBlur = () => {
-      registerSecurityViolation();
+      setTabSwitchCount((prev) => prev + 1);
+      setTabSwitchWarning(true);
+      setScreenBlacked(true);
     };
 
     const handlePageHide = () => {
-      registerSecurityViolation();
+      setScreenBlacked(true);
     };
 
     // Mobile: block long-press context menu via touch
@@ -212,7 +238,7 @@ export default function TestPage() {
       document.removeEventListener('touchmove', handleTouchMove);
       cleanupTrial?.();
     };
-  }, [clearScreenRestoreTimer, isTrial, enterFullscreen, registerSecurityViolation]);
+  }, [clearScreenRestoreTimer, isTrial, enterFullscreen, handleScreenshotViolation]);
 
   // Fullscreen state tracking (TRIAL only)
   useEffect(() => {
@@ -439,32 +465,121 @@ export default function TestPage() {
         <div className="fixed inset-0 z-[10003] bg-black" />
       )}
 
-      {/* Watermark overlay */}
-      <div
-        className="pointer-events-none fixed inset-0 z-[9998] overflow-hidden"
-        aria-hidden="true"
-        style={{ opacity: 0.06 }}
-      >
-        <div className="absolute inset-0 -rotate-[25deg] scale-150 origin-center">
-          <div className="flex flex-col items-center justify-center gap-12 pt-8">
-            {Array.from({ length: 6 }).map((_, row) => (
-              <div key={row} className="flex items-center gap-16" style={{ marginLeft: row % 2 === 0 ? 0 : -80 }}>
-                {Array.from({ length: 5 }).map((_, col) => (
-                  <svg key={col} width="200" height="160" viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <text x="100" y="110" textAnchor="middle" fontFamily="Arial, sans-serif" fontWeight="900" fontSize="120" fill="#000" letterSpacing="-4">
-                      AZ
-                    </text>
-                    <path d="M60 30 Q100 10 140 30" stroke="#dc2626" strokeWidth="6" fill="none" strokeLinecap="round" />
-                    <path d="M130 25 L140 30 L132 37" stroke="#dc2626" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                    <path d="M60 130 Q100 150 140 130" stroke="#dc2626" strokeWidth="6" fill="none" strokeLinecap="round" />
-                    <path d="M70 135 L60 130 L68 123" stroke="#dc2626" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                ))}
-              </div>
-            ))}
+      {/* Screenshot violation modal */}
+      {screenshotModal && (
+        <div className="fixed inset-0 z-[10005] flex items-center justify-center bg-black/90 backdrop-blur-md">
+          <div className="mx-4 max-w-md rounded-3xl bg-white p-8 text-center shadow-2xl">
+            {screenshotModal.type === 'warning' && (
+              <>
+                <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600">
+                  <ShieldAlert className="h-8 w-8" />
+                </div>
+                <h3 className="mt-4 text-xl font-bold text-slate-900">
+                  {localizeUi(student?.language, 'Предупреждение!', 'Эскертүү!')}
+                </h3>
+                <p className="mt-3 text-sm text-slate-600 leading-relaxed">
+                  {localizeUi(
+                    student?.language,
+                    'Обнаружена попытка сделать скриншот! Это строго запрещено. При повторном нарушении ваш аккаунт будет заблокирован на 48 часов.',
+                    'Скриншот жасоо аракети аныкталды! Бул катуу тыюу салынган. Кайра бузууда сиздин аккаунтуңуз 48 саатка бөгөттөлөт.',
+                  )}
+                </p>
+                <button
+                  onClick={() => {
+                    screenshotProcessingRef.current = false;
+                    setScreenshotModal(null);
+                    setScreenBlacked(false);
+                    logout();
+                    navigate('/login', { replace: true });
+                  }}
+                  className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-red-600 px-8 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                >
+                  {localizeUi(student?.language, 'Понятно', 'Түшүндүм')}
+                </button>
+              </>
+            )}
+            {screenshotModal.type === 'blocked_48h' && (
+              <>
+                <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600">
+                  <Ban className="h-8 w-8" />
+                </div>
+                <h3 className="mt-4 text-xl font-bold text-red-600">
+                  {localizeUi(student?.language, 'Аккаунт заблокирован!', 'Аккаунт бөгөттөлдү!')}
+                </h3>
+                <p className="mt-3 text-sm text-slate-600 leading-relaxed">
+                  {localizeUi(
+                    student?.language,
+                    'Ваша учётная запись заблокирована на 48 часов за повторную попытку сделать скриншот. При следующем нарушении аккаунт будет заблокирован навсегда.',
+                    'Сиздин аккаунтуңуз скриншот жасоого кайра аракеттенгениңиз үчүн 48 саатка бөгөттөлдү. Кийинки бузууда аккаунт биротоло бөгөттөлөт.',
+                  )}
+                </p>
+                <button
+                  onClick={() => {
+                    screenshotProcessingRef.current = false;
+                    setScreenshotModal(null);
+                    setScreenBlacked(false);
+                    logout();
+                    navigate('/login', { replace: true });
+                  }}
+                  className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-red-600 px-8 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                >
+                  {localizeUi(student?.language, 'Понятно', 'Түшүндүм')}
+                </button>
+              </>
+            )}
+            {screenshotModal.type === 'blocked_permanent' && (
+              <>
+                <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600">
+                  <Ban className="h-8 w-8" />
+                </div>
+                <h3 className="mt-4 text-xl font-bold text-red-600">
+                  {localizeUi(student?.language, 'Аккаунт заблокирован навсегда', 'Аккаунт биротоло бөгөттөлдү')}
+                </h3>
+                <p className="mt-3 text-sm text-slate-600 leading-relaxed">
+                  {localizeUi(
+                    student?.language,
+                    'Ваша учётная запись заблокирована навсегда за многократные попытки сделать скриншот. Обратитесь к администратору.',
+                    'Сиздин аккаунтуңуз скриншот жасоого көп жолку аракеттер үчүн биротоло бөгөттөлдү. Администраторго кайрылыңыз.',
+                  )}
+                </p>
+                <button
+                  onClick={() => {
+                    screenshotProcessingRef.current = false;
+                    setScreenshotModal(null);
+                    setScreenBlacked(false);
+                    logout();
+                    navigate('/login', { replace: true });
+                  }}
+                  className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-red-600 px-8 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                >
+                  {localizeUi(student?.language, 'Понятно', 'Түшүндүм')}
+                </button>
+              </>
+            )}
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Watermark overlay */}
+      <svg
+        className="pointer-events-none fixed z-[9998] overflow-visible"
+        style={{
+          inset: '-50vh -50vw',
+          width: '200vw',
+          height: '200vh',
+          opacity: 0.06,
+          mixBlendMode: 'multiply',
+          transform: 'rotate(-25deg)',
+        }}
+        aria-hidden="true"
+      >
+        <defs>
+          <pattern id="watermark-pattern" x="0" y="0" width="350" height="250" patternUnits="userSpaceOnUse">
+            <image href={logo} x="50" y="50" width="250" height="150" preserveAspectRatio="xMidYMid meet" />
+          </pattern>
+        </defs>
+        <rect x="0" y="0" width="100%" height="100%" fill="url(#watermark-pattern)" />
+      </svg>
 
       {/* TRIAL: Fullscreen prompt */}
       {isTrial && !isFullscreen && !tabSwitchWarning && (

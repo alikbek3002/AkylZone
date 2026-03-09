@@ -202,3 +202,12 @@ export function submitStudentTest(
 ) {
   return request<SubmitTestResponse>('/tests/submit', 'POST', payload, token);
 }
+
+export interface ScreenshotViolationResponse {
+  action: 'warning' | 'blocked_48h' | 'blocked_permanent';
+  strikes: number;
+}
+
+export function reportScreenshotViolation(token: string) {
+  return request<ScreenshotViolationResponse>('/tests/screenshot-violation', 'POST', {}, token);
+}

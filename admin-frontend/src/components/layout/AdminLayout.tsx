@@ -1,11 +1,12 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { Users, FileText, LogOut } from "lucide-react";
+import { Users, FileText, LogOut, ShieldOff } from "lucide-react";
 import { useAdminAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
     { name: "Ученики", path: "/dashboard/students", icon: Users },
     { name: "Тесты", path: "/dashboard/tests", icon: FileText },
+    { name: "Заблокированные", path: "/dashboard/blocked", icon: ShieldOff },
 ];
 
 export default function AdminLayout() {

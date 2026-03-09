@@ -41,6 +41,8 @@ app.use('/api/admin', require('./routes/adminRoutes'));
 
 app.get('/api/ping', (_req, res) => res.json({ message: 'pong' }));
 
-app.listen(port, '0.0.0.0', () => {
+app.listen(port, '0.0.0.0', async () => {
   console.log(`Backend is running on port ${port}`);
+  const { runMigrations } = require('./lib/migrate');
+  await runMigrations().catch((err) => console.error('Migration check failed:', err));
 });

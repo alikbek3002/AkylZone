@@ -78,7 +78,7 @@ function getCorrectOptionIndex(options) {
 async function getStudentById(studentId) {
   const { data, error } = await supabase
     .from('students')
-    .select('id, full_name, grade, language, username, password_hash, plain_password, active_session_token')
+    .select('id, full_name, grade, language, username, password_hash, plain_password, active_session_token, screenshot_strikes, blocked_until, blocked_permanently')
     .eq('id', studentId)
     .maybeSingle();
 
@@ -87,6 +87,17 @@ async function getStudentById(studentId) {
   }
 
   return data;
+}
+
+function isStudentBlocked(student) {
+  if (student.blocked_permanently) return { blocked: true, reason: 'permanent' };
+  if (student.blocked_until) {
+    const until = new Date(student.blocked_until);
+    if (until > new Date()) {
+      return { blocked: true, reason: 'temporary', blocked_until: student.blocked_until };
+    }
+  }
+  return { blocked: false };
 }
 
 async function authenticateStudent(req, res, next) {
@@ -263,7 +274,7 @@ router.post('/login', async (req, res) => {
     const plainPassword = String(password);
     const { data: student, error } = await supabase
       .from('students')
-      .select('id, full_name, grade, language, username, password_hash, plain_password')
+      .select('id, full_name, grade, language, username, password_hash, plain_password, screenshot_strikes, blocked_until, blocked_permanently')
       .ilike('username', normalizedUsername)
       .maybeSingle();
 
@@ -277,6 +288,21 @@ router.post('/login', async (req, res) => {
 
     if (!hashMatches && !plainMatches) {
       return res.status(401).json({ error: 'Неверный логин или пароль' });
+    }
+
+    const blockStatus = isStudentBlocked(student);
+    if (blockStatus.blocked) {
+      if (blockStatus.reason === 'permanent') {
+        return res.status(403).json({
+          error: 'Ваша учётная запись заблокирована навсегда.',
+          code: 'BLOCKED_PERMANENT',
+        });
+      }
+      return res.status(403).json({
+        error: `Ваша учётная запись заблокирована до ${new Date(blockStatus.blocked_until).toLocaleString('ru-RU')}.`,
+        code: 'BLOCKED_TEMPORARY',
+        blocked_until: blockStatus.blocked_until,
+      });
     }
 
     const language = normalizeLanguage(student.language);
@@ -678,6 +704,47 @@ router.post('/submit', async (req, res) => {
   } catch (error) {
     console.error('Test submit error:', error);
     return res.status(500).json({ error: 'Internal server error during test submit' });
+  }
+});
+
+router.post('/screenshot-violation', async (req, res) => {
+  try {
+    const student = req.student;
+    const currentStrikes = (student.screenshot_strikes || 0) + 1;
+    const updates = { screenshot_strikes: currentStrikes };
+
+    let action = 'warning';
+
+    if (currentStrikes === 1) {
+      action = 'warning';
+    } else if (currentStrikes === 2) {
+      const blockedUntil = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+      updates.blocked_until = blockedUntil;
+      updates.active_session_token = null;
+      action = 'blocked_48h';
+    } else if (currentStrikes >= 3) {
+      updates.blocked_permanently = true;
+      updates.active_session_token = null;
+      action = 'blocked_permanent';
+    }
+
+    const { error: updateError } = await supabase
+      .from('students')
+      .update(updates)
+      .eq('id', student.id);
+
+    if (updateError) {
+      console.error('Screenshot violation update error:', updateError);
+      return res.status(500).json({ error: 'Failed to record violation' });
+    }
+
+    return res.json({
+      action,
+      strikes: currentStrikes,
+    });
+  } catch (error) {
+    console.error('Screenshot violation error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

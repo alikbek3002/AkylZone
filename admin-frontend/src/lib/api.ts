@@ -245,6 +245,23 @@ export async function deleteQuestion(
   );
 }
 
+// ─── Blocked Students ────────────────────────────────────────────────────────
+
+export interface BlockedStudent extends Student {
+  screenshotStrikes: number;
+  blockedUntil: string | null;
+  blockedPermanently: boolean;
+}
+
+export async function fetchBlockedStudents() {
+  const response = await request<{ students: BlockedStudent[] }>('/admin/blocked-students', 'GET');
+  return response.students;
+}
+
+export function unblockStudent(studentId: string) {
+  return request<{ message: string }>(`/admin/unblock-student/${studentId}`, 'POST');
+}
+
 // ─── Content Readiness ──────────────────────────────────────────────────────
 
 export async function fetchContentReadiness() {
