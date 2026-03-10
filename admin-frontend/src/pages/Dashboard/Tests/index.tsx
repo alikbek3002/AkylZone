@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Plus,
   Pencil,
@@ -17,6 +17,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { MarkdownRenderer } from '@/components/MarkdownRenderer';
+import { MathToolbar } from '@/components/MathToolbar';
+import { VisualMathModal } from '@/components/VisualMathModal';
 import {
   addQuestion,
   fetchQuestions,
@@ -78,6 +81,10 @@ export default function TestsPage() {
   });
   const [formLoading, setFormLoading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
+  
+  // Visual Math Editor State
+  const [mathModalOpen, setMathModalOpen] = useState(false);
+  const [mathModalTargetField, setMathModalTargetField] = useState<keyof typeof formData | null>(null);
 
   const subjectLabel = SUBJECTS.find((s) => s.id === subject)?.label ?? subject;
   const languageLabel = LANGUAGES.find((l) => l.id === language)?.label ?? language;
@@ -164,6 +171,29 @@ export default function TestsPage() {
       toast.error(error instanceof Error ? error.message : 'Ошибка загрузки');
     } finally {
       setImageUploading(false);
+    }
+  };
+
+  const handleInsertMath = (template: string, field: keyof typeof formData) => {
+    setFormData((prev) => {
+      const currentVal = prev[field];
+      return { ...prev, [field]: currentVal + ' ' + template + ' ' };
+    });
+  };
+
+  const openVisualMathEditor = (field: keyof typeof formData) => {
+    setMathModalTargetField(field);
+    setMathModalOpen(true);
+  };
+
+  const handleVisualMathInsert = (latex: string) => {
+    if (mathModalTargetField) {
+      setFormData((prev) => {
+        const currentVal = prev[mathModalTargetField];
+        // Если поле пустое, просто вставляем, иначе добавляем через пробел
+        const newVal = currentVal.trim() ? currentVal + ' ' + latex : latex;
+        return { ...prev, [mathModalTargetField]: newVal };
+      });
     }
   };
 
@@ -355,14 +385,27 @@ export default function TestsPage() {
 
               <div className="space-y-2">
                 <Label>Текст вопроса *</Label>
-                <textarea
-                  required
-                  value={formData.questionText}
-                  onChange={(e) => setFormData((p) => ({ ...p, questionText: e.target.value }))}
-                  placeholder="Введите текст вопроса..."
-                  rows={3}
-                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                <div className="text-xs text-muted-foreground mb-1">
+                  Поддерживается Markdown и формулы. Для дробей и математики используйте <code>$</code>: например <code>$\frac{1}{2}$</code> или <code>$$x^2 + y^2$$</code>.
+                </div>
+                <MathToolbar 
+                  onInsert={(t) => handleInsertMath(t, 'questionText')} 
+                  onOpenVisualEditor={() => openVisualMathEditor('questionText')}
                 />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <textarea
+                    required
+                    value={formData.questionText}
+                    onChange={(e) => setFormData((p) => ({ ...p, questionText: e.target.value }))}
+                    placeholder="Введите текст вопроса..."
+                    rows={5}
+                    className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  />
+                  <div className="rounded-md border bg-muted/30 p-3 overflow-auto min-h-[120px]">
+                    <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Предпросмотр:</div>
+                    <MarkdownRenderer content={formData.questionText || '*Текст вопроса будет здесь*'} />
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -406,23 +449,35 @@ export default function TestsPage() {
                     <div key={letter} className="space-y-1.5">
                       <div className="flex items-center justify-between">
                         <Label>Вариант {letter}</Label>
-                        <button
-                          type="button"
-                          onClick={() => setFormData((p) => ({ ...p, correctOption: letter }))}
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${isCorrect
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                            }`}
-                        >
-                          {isCorrect ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                          {isCorrect ? 'Правильный' : 'Неправильный'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <MathToolbar 
+                            onInsert={(t) => handleInsertMath(t, key)} 
+                            onOpenVisualEditor={() => openVisualMathEditor(key)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setFormData((p) => ({ ...p, correctOption: letter }))}
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${isCorrect
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                              }`}
+                          >
+                            {isCorrect ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                            {isCorrect ? 'Правильный' : 'Неправильный'}
+                          </button>
+                        </div>
                       </div>
-                      <Input
-                        required
-                        value={formData[key]}
-                        onChange={(e) => setFormData((p) => ({ ...p, [key]: e.target.value }))}
-                      />
+                      <div className="flex gap-2">
+                        <Input
+                          required
+                          value={formData[key]}
+                          onChange={(e) => setFormData((p) => ({ ...p, [key]: e.target.value }))}
+                          className="flex-1"
+                        />
+                        <div className="flex items-center justify-center min-w-[100px] max-w-[150px] rounded-md border bg-muted/30 px-2 py-1 text-sm overflow-hidden">
+                          <MarkdownRenderer content={formData[key] || '*пусто*'} />
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -430,13 +485,23 @@ export default function TestsPage() {
 
               <div className="space-y-2">
                 <Label>Объяснение ответа</Label>
-                <textarea
-                  value={formData.explanation}
-                  onChange={(e) => setFormData((p) => ({ ...p, explanation: e.target.value }))}
-                  placeholder="Объясните, почему этот ответ правильный..."
-                  rows={3}
-                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                <MathToolbar 
+                  onInsert={(t) => handleInsertMath(t, 'explanation')} 
+                  onOpenVisualEditor={() => openVisualMathEditor('explanation')}
                 />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <textarea
+                    value={formData.explanation}
+                    onChange={(e) => setFormData((p) => ({ ...p, explanation: e.target.value }))}
+                    placeholder="Объясните, почему этот ответ правильный..."
+                    rows={4}
+                    className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  />
+                  <div className="rounded-md border bg-muted/30 p-3 overflow-auto min-h-[100px]">
+                    <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Предпросмотр:</div>
+                    <MarkdownRenderer content={formData.explanation || '*Объяснение будет здесь*'} />
+                  </div>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-2">
@@ -464,6 +529,12 @@ export default function TestsPage() {
             </form>
           </CardContent>
         </Card>
+
+        <VisualMathModal 
+          isOpen={mathModalOpen} 
+          onClose={() => setMathModalOpen(false)} 
+          onInsert={handleVisualMathInsert} 
+        />
       </div>
     );
   }
@@ -543,9 +614,9 @@ export default function TestsPage() {
                               {q.topic}
                             </span>
                           )}
-                          <p className="font-medium text-foreground leading-relaxed">
-                            {q.question_text}
-                          </p>
+                          <div className="font-medium text-foreground leading-relaxed">
+                            <MarkdownRenderer content={q.question_text} />
+                          </div>
                         </div>
 
                         {/* Actions */}
@@ -578,7 +649,9 @@ export default function TestsPage() {
                               }`}
                           >
                             <span className="font-bold">{String.fromCharCode(65 + i)}</span>
-                            {opt.text.length > 40 ? opt.text.slice(0, 40) + '…' : opt.text}
+                            <span className="inline-block max-w-[200px] truncate align-bottom">
+                              <MarkdownRenderer content={opt.text} />
+                            </span>
                             {opt.is_correct && <CheckCircle2 className="h-3 w-3" />}
                           </span>
                         ))}

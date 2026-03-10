@@ -27,3 +27,15 @@ body {
   background: #f8fafc;
   color: #0f172a;
 }
+
+/* Стили для формул KaTeX, чтобы они выглядели крупнее и лучше читались */
+.markdown-content .katex {
+  font-size: 1.15em;
+}
+
+.markdown-content .katex-display {
+  margin: 1rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5rem 0;
+}

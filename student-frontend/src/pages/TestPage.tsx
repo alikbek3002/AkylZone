@@ -3,6 +3,7 @@ import { ArrowRight, ArrowLeft, CheckCircle2, XCircle, Maximize, Shield, LogOut,
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import logo from '../assets/logo.jpg';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import {
   answerStudentQuestion,
   submitStudentTest,
@@ -603,7 +604,7 @@ export default function TestPage() {
 
           <div className="border-b border-stone-100 px-3.5 py-3 sm:px-6 sm:py-6">
             <h2 className="text-base sm:text-xl font-medium leading-relaxed text-black">
-              {currentQuestion?.text}
+              <MarkdownRenderer content={currentQuestion?.text || ''} />
             </h2>
           </div>
 
@@ -643,7 +644,9 @@ export default function TestPage() {
                     <span className={`inline-flex h-7 w-7 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg sm:rounded-xl border-2 text-xs sm:text-sm font-bold ${badgeClassName}`}>
                       {String.fromCharCode(65 + index)}
                     </span>
-                    <span className="pt-0.5 sm:pt-1 text-sm sm:text-base font-medium leading-snug">{option.text}</span>
+                    <span className="pt-0.5 sm:pt-1 text-sm sm:text-base font-medium leading-snug">
+                      <MarkdownRenderer content={option.text} />
+                    </span>
                   </button>
                 );
               })}
@@ -675,9 +678,9 @@ export default function TestPage() {
               </div>
 
               {currentReveal.explanation && (
-                <p className="mt-2.5 text-xs sm:text-sm leading-relaxed text-slate-600">
-                  {currentReveal.explanation}
-                </p>
+                <div className="mt-2.5 text-xs sm:text-sm leading-relaxed text-slate-600">
+                  <MarkdownRenderer content={currentReveal.explanation} />
+                </div>
               )}
             </div>
           )}
