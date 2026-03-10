@@ -119,7 +119,7 @@ export default function DashboardPage() {
                 {localizeUi(student?.language, '2 формата', '2 формат')}
               </div>
               <div className="text-[10px] sm:text-xs font-medium text-stone-500">
-                {localizeUi(student?.language, 'Основной и Пробный', 'Негизги жана Сынамык')}
+                {localizeUi(student?.language, 'Предметный и Пробный', 'Предметтик жана Сынамык')}
               </div>
             </div>
 
