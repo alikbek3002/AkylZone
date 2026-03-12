@@ -142,7 +142,8 @@ function getTestTypeTitle(type, language) {
 }
 
 function buildQuestionTableName(subject, language, grade) {
-  return `questions_${subject}_${normalizeLanguage(language)}_${grade}`;
+  const normLang = subject === 'mathlogic' ? 'ru' : normalizeLanguage(language);
+  return `questions_${subject}_${normLang}_${grade}`;
 }
 
 function buildResultTableName(type, language, grade) {
@@ -192,7 +193,7 @@ async function loadQuestionCounts(supabase) {
     MATHLOGIC_GRADES.map((grade) => buildQuestionTableName('mathlogic', language, grade)),
   );
 
-  const allTableNames = [...regularTableNames, ...mathlogicTableNames];
+  const allTableNames = [...new Set([...regularTableNames, ...mathlogicTableNames])];
 
   const results = await Promise.all(
     allTableNames.map(async (tableName) => {
@@ -213,9 +214,13 @@ async function loadQuestionCounts(supabase) {
   const countsByTable = Object.fromEntries(results);
 
   // Also load math/logic type counts from mathlogic tables
+  const processedMathlogicTables = new Set();
   for (const language of LANGUAGES) {
     for (const grade of MATHLOGIC_GRADES) {
       const tableName = buildQuestionTableName('mathlogic', language, grade);
+      if (processedMathlogicTables.has(tableName)) continue;
+      processedMathlogicTables.add(tableName);
+
       for (const qType of ['math', 'logic']) {
         const { count, error } = await supabase
           .from(tableName)

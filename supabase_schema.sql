@@ -47,31 +47,11 @@ CREATE TABLE IF NOT EXISTS questions_mathlogic_ru_7 (
     image_url TEXT DEFAULT '',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
-CREATE TABLE IF NOT EXISTS questions_mathlogic_kg_6 (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    question_type TEXT NOT NULL CHECK (question_type IN ('math', 'logic')),
-    question_text TEXT NOT NULL,
-    options JSONB NOT NULL,
-    topic TEXT DEFAULT '',
-    explanation TEXT DEFAULT '',
-    image_url TEXT DEFAULT '',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-CREATE TABLE IF NOT EXISTS questions_mathlogic_kg_7 (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    question_type TEXT NOT NULL CHECK (question_type IN ('math', 'logic')),
-    question_text TEXT NOT NULL,
-    options JSONB NOT NULL,
-    topic TEXT DEFAULT '',
-    explanation TEXT DEFAULT '',
-    image_url TEXT DEFAULT '',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
+
 
 CREATE INDEX IF NOT EXISTS idx_mathlogic_ru_6_type ON questions_mathlogic_ru_6 (question_type);
 CREATE INDEX IF NOT EXISTS idx_mathlogic_ru_7_type ON questions_mathlogic_ru_7 (question_type);
-CREATE INDEX IF NOT EXISTS idx_mathlogic_kg_6_type ON questions_mathlogic_kg_6 (question_type);
-CREATE INDEX IF NOT EXISTS idx_mathlogic_kg_7_type ON questions_mathlogic_kg_7 (question_type);
+
 CREATE TABLE IF NOT EXISTS questions_history_ru_5 (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     question_text TEXT NOT NULL,

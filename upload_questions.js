@@ -49,7 +49,8 @@ const VALID_LANGUAGES = ['ru', 'kg'];
 const VALID_GRADES = [5, 6, 7];
 
 function buildTableName(subject, lang, grade) {
-    return `questions_${subject}_${lang}_${grade}`;
+    const normLang = subject === 'mathlogic' ? 'ru' : lang;
+    return `questions_${subject}_${normLang}_${grade}`;
 }
 
 async function uploadQuestions(jsonPath) {

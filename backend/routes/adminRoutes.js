@@ -120,7 +120,8 @@ async function ensureUniqueUsername(baseUsername) {
 }
 
 function buildQuestionTableName(subject, language, grade) {
-  return `questions_${subject}_${language}_${grade}`;
+  const normLang = subject === 'mathlogic' ? 'ru' : normalizeLanguage(language);
+  return `questions_${subject}_${normLang}_${grade}`;
 }
 
 function buildResultTableNames() {
@@ -136,7 +137,7 @@ function buildResultTableNames() {
 }
 
 const REGULAR_SUBJECTS = ['history', 'english', 'russian', 'kyrgyz'];
-const QUESTION_TABLES = [
+const QUESTION_TABLES = [...new Set([
   ...REGULAR_SUBJECTS.flatMap((subject) =>
     LANGUAGES.flatMap((language) =>
       QUESTION_GRADES.map((grade) => buildQuestionTableName(subject, language, grade)),
@@ -145,7 +146,7 @@ const QUESTION_TABLES = [
   ...LANGUAGES.flatMap((language) =>
     MATHLOGIC_GRADES.map((grade) => buildQuestionTableName('mathlogic', language, grade)),
   ),
-];
+])];
 const RESULT_TABLES = buildResultTableNames();
 
 const requireAdmin = (req, res, next) => {
