@@ -43,7 +43,7 @@ interface CreateStudentPayload {
 }
 
 interface AddQuestionPayload {
-  subject: 'math' | 'logic' | 'history' | 'english' | 'russian' | 'kyrgyz';
+  subject: 'mathlogic' | 'history' | 'english' | 'russian' | 'kyrgyz';
   language: 'ru' | 'kg';
   grade: number;
   questionText: string;
@@ -51,6 +51,7 @@ interface AddQuestionPayload {
   topic?: string;
   explanation?: string;
   imageUrl?: string;
+  questionType?: 'math' | 'logic';
 }
 
 export interface ReadinessLine {
@@ -122,6 +123,7 @@ export interface Question {
   explanation: string;
   image_url: string;
   created_at: string;
+  question_type?: 'math' | 'logic';
 }
 
 interface QuestionsResponse {
@@ -210,11 +212,12 @@ export function addQuestion(payload: AddQuestionPayload) {
   return request('/admin/questions', 'POST', payload);
 }
 
-export async function fetchQuestions(subject: string, language: string, grade: number) {
-  return request<QuestionsResponse>(
-    `/admin/questions?subject=${subject}&language=${language}&grade=${grade}`,
-    'GET',
-  );
+export async function fetchQuestions(subject: string, language: string, grade: number, questionType?: string) {
+  let url = `/admin/questions?subject=${subject}&language=${language}&grade=${grade}`;
+  if (questionType) {
+    url += `&questionType=${questionType}`;
+  }
+  return request<QuestionsResponse>(url, 'GET');
 }
 
 export async function updateQuestion(
@@ -228,6 +231,7 @@ export async function updateQuestion(
     topic?: string;
     explanation?: string;
     imageUrl?: string;
+    questionType?: string;
   },
 ) {
   return request<{ question: Question }>(`/admin/questions/${questionId}`, 'PATCH', payload);

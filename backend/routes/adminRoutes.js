@@ -8,9 +8,10 @@ const { loadQuestionCounts, buildContentReadiness } = require('../lib/testCatalo
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-const SUBJECTS = ['math', 'logic', 'history', 'english', 'russian', 'kyrgyz'];
+const SUBJECTS = ['mathlogic', 'history', 'english', 'russian', 'kyrgyz'];
 const LANGUAGES = ['ru', 'kg'];
 const QUESTION_GRADES = [5, 6, 7];
+const MATHLOGIC_GRADES = [6, 7];
 const STUDENT_GRADES = [6, 7];
 const TEST_TYPES = ['main', 'trial'];
 
@@ -134,11 +135,17 @@ function buildResultTableNames() {
   return tables;
 }
 
-const QUESTION_TABLES = SUBJECTS.flatMap((subject) =>
-  LANGUAGES.flatMap((language) =>
-    QUESTION_GRADES.map((grade) => buildQuestionTableName(subject, language, grade)),
+const REGULAR_SUBJECTS = ['history', 'english', 'russian', 'kyrgyz'];
+const QUESTION_TABLES = [
+  ...REGULAR_SUBJECTS.flatMap((subject) =>
+    LANGUAGES.flatMap((language) =>
+      QUESTION_GRADES.map((grade) => buildQuestionTableName(subject, language, grade)),
+    ),
   ),
-);
+  ...LANGUAGES.flatMap((language) =>
+    MATHLOGIC_GRADES.map((grade) => buildQuestionTableName('mathlogic', language, grade)),
+  ),
+];
 const RESULT_TABLES = buildResultTableNames();
 
 const requireAdmin = (req, res, next) => {
@@ -618,7 +625,7 @@ router.post('/upload-image', requireAdmin, upload.single('image'), async (req, r
 
 router.post('/questions', requireAdmin, async (req, res) => {
   try {
-    const { subject, language: rawLanguage, grade: rawGrade, questionText, options, topic, explanation, imageUrl } = req.body || {};
+    const { subject, language: rawLanguage, grade: rawGrade, questionText, options, topic, explanation, imageUrl, questionType } = req.body || {};
     const language = normalizeLanguage(rawLanguage);
     const grade = parseGrade(rawGrade);
     const normalizedSubject = String(subject || '').trim().toLowerCase();
@@ -626,6 +633,7 @@ router.post('/questions', requireAdmin, async (req, res) => {
     const normalizedTopic = String(topic || '').trim();
     const normalizedExplanation = String(explanation || '').trim();
     const normalizedImageUrl = String(imageUrl || '').trim();
+    const normalizedQuestionType = String(questionType || '').trim().toLowerCase();
     const questionOptions = Array.isArray(options) ? options : [];
 
     if (!SUBJECTS.includes(normalizedSubject)) {
@@ -634,8 +642,14 @@ router.post('/questions', requireAdmin, async (req, res) => {
     if (!LANGUAGES.includes(language)) {
       return res.status(400).json({ error: 'Invalid language' });
     }
-    if (!grade || !QUESTION_GRADES.includes(grade)) {
+    // For mathlogic, only grades 6 and 7 are valid
+    const validGrades = normalizedSubject === 'mathlogic' ? MATHLOGIC_GRADES : QUESTION_GRADES;
+    if (!grade || !validGrades.includes(grade)) {
       return res.status(400).json({ error: 'Invalid grade' });
+    }
+    // For mathlogic, question_type is required
+    if (normalizedSubject === 'mathlogic' && !['math', 'logic'].includes(normalizedQuestionType)) {
+      return res.status(400).json({ error: 'questionType must be math or logic for mathlogic subject' });
     }
     if (!normalizedText) {
       return res.status(400).json({ error: 'Question text is required' });
@@ -659,15 +673,20 @@ router.post('/questions', requireAdmin, async (req, res) => {
     }
 
     const tableName = buildQuestionTableName(normalizedSubject, language, grade);
+    const insertData = {
+      question_text: normalizedText,
+      options: validOptions,
+      topic: normalizedTopic,
+      explanation: normalizedExplanation,
+      image_url: normalizedImageUrl,
+    };
+    // Add question_type for mathlogic
+    if (normalizedSubject === 'mathlogic') {
+      insertData.question_type = normalizedQuestionType;
+    }
     const { data, error } = await supabase
       .from(tableName)
-      .insert({
-        question_text: normalizedText,
-        options: validOptions,
-        topic: normalizedTopic,
-        explanation: normalizedExplanation,
-        image_url: normalizedImageUrl,
-      })
+      .insert(insertData)
       .select()
       .single();
 
@@ -693,13 +712,20 @@ router.get('/questions', requireAdmin, async (req, res) => {
     const subject = String(req.query.subject || '').trim().toLowerCase();
     const language = normalizeLanguage(req.query.language);
     const grade = parseGrade(req.query.grade);
+    const questionType = String(req.query.questionType || '').trim().toLowerCase();
     if (!SUBJECTS.includes(subject)) return res.status(400).json({ error: 'Invalid subject' });
     if (!LANGUAGES.includes(language)) return res.status(400).json({ error: 'Invalid language' });
-    if (!grade || !QUESTION_GRADES.includes(grade)) return res.status(400).json({ error: 'Invalid grade' });
+    const validGrades = subject === 'mathlogic' ? MATHLOGIC_GRADES : QUESTION_GRADES;
+    if (!grade || !validGrades.includes(grade)) return res.status(400).json({ error: 'Invalid grade' });
     const tableName = buildQuestionTableName(subject, language, grade);
-    const { data, error } = await supabase.from(tableName)
-      .select('id, question_text, options, topic, explanation, image_url, created_at')
+    let query = supabase.from(tableName)
+      .select('id, question_text, options, topic, explanation, image_url, created_at' + (subject === 'mathlogic' ? ', question_type' : ''))
       .order('created_at', { ascending: false });
+    // Filter by questionType if mathlogic and specified
+    if (subject === 'mathlogic' && questionType && ['math', 'logic'].includes(questionType)) {
+      query = query.eq('question_type', questionType);
+    }
+    const { data, error } = await query;
     if (error) { console.error('Fetch questions error:', error); return res.status(500).json({ error: 'Failed to fetch questions' }); }
     return res.json({ questions: data || [], table: tableName, total: (data || []).length });
   } catch (error) { console.error('Get questions error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -709,13 +735,14 @@ router.get('/questions', requireAdmin, async (req, res) => {
 router.patch('/questions/:id', requireAdmin, async (req, res) => {
   try {
     const questionId = String(req.params.id || '').trim();
-    const { subject, language: rawLanguage, grade: rawGrade, questionText, options, topic, explanation, imageUrl } = req.body || {};
+    const { subject, language: rawLanguage, grade: rawGrade, questionText, options, topic, explanation, imageUrl, questionType } = req.body || {};
     const language = normalizeLanguage(rawLanguage);
     const grade = parseGrade(rawGrade);
     const normalizedSubject = String(subject || '').trim().toLowerCase();
     if (!SUBJECTS.includes(normalizedSubject)) return res.status(400).json({ error: 'Invalid subject' });
     if (!LANGUAGES.includes(language)) return res.status(400).json({ error: 'Invalid language' });
-    if (!grade || !QUESTION_GRADES.includes(grade)) return res.status(400).json({ error: 'Invalid grade' });
+    const validGrades = normalizedSubject === 'mathlogic' ? MATHLOGIC_GRADES : QUESTION_GRADES;
+    if (!grade || !validGrades.includes(grade)) return res.status(400).json({ error: 'Invalid grade' });
     const tableName = buildQuestionTableName(normalizedSubject, language, grade);
     const updates = {};
     if (questionText !== undefined) {
@@ -734,9 +761,17 @@ router.patch('/questions/:id', requireAdmin, async (req, res) => {
     if (topic !== undefined) updates.topic = String(topic || '').trim();
     if (explanation !== undefined) updates.explanation = String(explanation || '').trim();
     if (imageUrl !== undefined) updates.image_url = String(imageUrl || '').trim();
+    // Allow updating question_type for mathlogic
+    if (normalizedSubject === 'mathlogic' && questionType !== undefined) {
+      const qt = String(questionType || '').trim().toLowerCase();
+      if (['math', 'logic'].includes(qt)) {
+        updates.question_type = qt;
+      }
+    }
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No updates provided' });
+    const selectFields = 'id, question_text, options, topic, explanation, image_url, created_at' + (normalizedSubject === 'mathlogic' ? ', question_type' : '');
     const { data, error } = await supabase.from(tableName).update(updates).eq('id', questionId)
-      .select('id, question_text, options, topic, explanation, image_url, created_at').single();
+      .select(selectFields).single();
     if (error) { console.error('Update question error:', error); return res.status(500).json({ error: 'Failed to update question' }); }
     return res.json({ question: data });
   } catch (error) { console.error('Patch question error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -751,7 +786,8 @@ router.delete('/questions/:id', requireAdmin, async (req, res) => {
     const grade = parseGrade(req.query.grade);
     if (!SUBJECTS.includes(subject)) return res.status(400).json({ error: 'Invalid subject' });
     if (!LANGUAGES.includes(language)) return res.status(400).json({ error: 'Invalid language' });
-    if (!grade || !QUESTION_GRADES.includes(grade)) return res.status(400).json({ error: 'Invalid grade' });
+    const validGrades = subject === 'mathlogic' ? MATHLOGIC_GRADES : QUESTION_GRADES;
+    if (!grade || !validGrades.includes(grade)) return res.status(400).json({ error: 'Invalid grade' });
     const tableName = buildQuestionTableName(subject, language, grade);
     const { error } = await supabase.from(tableName).delete().eq('id', questionId);
     if (error) { console.error('Delete question error:', error); return res.status(500).json({ error: 'Failed to delete question' }); }

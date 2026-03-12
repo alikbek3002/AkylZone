@@ -30,12 +30,16 @@ import {
 } from '@/lib/api';
 
 const SUBJECTS = [
-  { id: 'math', label: 'Математика' },
-  { id: 'logic', label: 'Логика' },
+  { id: 'mathlogic', label: 'Математика и Логика' },
   { id: 'history', label: 'История' },
   { id: 'russian', label: 'Русский язык' },
   { id: 'kyrgyz', label: 'Кыргызский язык' },
   { id: 'english', label: 'Английский язык' },
+];
+
+const QUESTION_TYPES = [
+  { id: 'math', label: 'Математика' },
+  { id: 'logic', label: 'Логика' },
 ];
 
 const LANGUAGES = [
@@ -43,8 +47,13 @@ const LANGUAGES = [
   { id: 'kg', label: 'Кыргызский' },
 ];
 
-const GRADES = [
+const ALL_GRADES = [
   { id: 5, label: '5 класс' },
+  { id: 6, label: '6 класс' },
+  { id: 7, label: '7 класс' },
+];
+
+const MATHLOGIC_GRADES = [
   { id: 6, label: '6 класс' },
   { id: 7, label: '7 класс' },
 ];
@@ -53,9 +62,10 @@ type View = 'filters' | 'list' | 'add' | 'edit';
 
 export default function TestsPage() {
   // Filter state
-  const [subject, setSubject] = useState('math');
+  const [subject, setSubject] = useState('mathlogic');
   const [language, setLanguage] = useState('ru');
   const [grade, setGrade] = useState(6);
+  const [questionType, setQuestionType] = useState('');  // '' = all, 'math', 'logic'
 
   // View state
   const [view, setView] = useState<View>('filters');
@@ -81,19 +91,21 @@ export default function TestsPage() {
   });
   const [formLoading, setFormLoading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
-  
+
   // Visual Math Editor State
   const [mathModalOpen, setMathModalOpen] = useState(false);
   const [mathModalTargetField, setMathModalTargetField] = useState<keyof typeof formData | null>(null);
 
+  const GRADES = subject === 'mathlogic' ? MATHLOGIC_GRADES : ALL_GRADES;
   const subjectLabel = SUBJECTS.find((s) => s.id === subject)?.label ?? subject;
   const languageLabel = LANGUAGES.find((l) => l.id === language)?.label ?? language;
   const gradeLabel = GRADES.find((g) => g.id === grade)?.label ?? `${grade} класс`;
+  const questionTypeLabel = QUESTION_TYPES.find((t) => t.id === questionType)?.label ?? '';
 
   const loadQuestions = useCallback(async () => {
     setListLoading(true);
     try {
-      const data = await fetchQuestions(subject, language, grade);
+      const data = await fetchQuestions(subject, language, grade, subject === 'mathlogic' && questionType ? questionType : undefined);
       setQuestions(data.questions);
       setTotalCount(data.total);
     } catch (error) {
@@ -101,7 +113,7 @@ export default function TestsPage() {
     } finally {
       setListLoading(false);
     }
-  }, [subject, language, grade]);
+  }, [subject, language, grade, questionType]);
 
   // Load questions when entering list view
   useEffect(() => {
@@ -208,7 +220,7 @@ export default function TestsPage() {
     e.preventDefault();
     setFormLoading(true);
     try {
-      await addQuestion({
+      const payload: any = {
         subject: subject as any,
         language: language as 'ru' | 'kg',
         grade,
@@ -217,7 +229,12 @@ export default function TestsPage() {
         topic: formData.topic,
         explanation: formData.explanation,
         imageUrl: formData.imageUrl,
-      });
+      };
+      // Add questionType for mathlogic
+      if (subject === 'mathlogic') {
+        payload.questionType = questionType || 'math';
+      }
+      await addQuestion(payload);
       toast.success('Вопрос добавлен');
       resetForm();
       setView('list');
@@ -233,7 +250,7 @@ export default function TestsPage() {
     if (!editingQuestion) return;
     setFormLoading(true);
     try {
-      await updateQuestion(editingQuestion.id, {
+      const payload: any = {
         subject,
         language,
         grade,
@@ -242,7 +259,12 @@ export default function TestsPage() {
         topic: formData.topic,
         explanation: formData.explanation,
         imageUrl: formData.imageUrl,
-      });
+      };
+      // Add questionType for mathlogic
+      if (subject === 'mathlogic') {
+        payload.questionType = questionType || editingQuestion?.question_type || 'math';
+      }
+      await updateQuestion(editingQuestion.id, payload);
       toast.success('Вопрос обновлён');
       resetForm();
       setView('list');
@@ -281,7 +303,13 @@ export default function TestsPage() {
                 {SUBJECTS.map((s) => (
                   <button
                     key={s.id}
-                    onClick={() => setSubject(s.id)}
+                    onClick={() => {
+                      setSubject(s.id);
+                      // Reset grade to 6 when switching to mathlogic (no 5th grade)
+                      if (s.id === 'mathlogic' && grade === 5) {
+                        setGrade(6);
+                      }
+                    }}
                     className={`rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all ${subject === s.id
                       ? 'border-primary bg-primary text-primary-foreground'
                       : 'border-border bg-card hover:border-primary/50'
@@ -292,6 +320,35 @@ export default function TestsPage() {
                 ))}
               </div>
             </div>
+
+            {subject === 'mathlogic' && (
+              <div className="space-y-2">
+                <Label className="text-base font-semibold">Тип вопроса</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => setQuestionType('')}
+                    className={`rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all ${questionType === ''
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-card hover:border-primary/50'
+                      }`}
+                  >
+                    Все
+                  </button>
+                  {QUESTION_TYPES.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setQuestionType(t.id)}
+                      className={`rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all ${questionType === t.id
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-card hover:border-primary/50'
+                        }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -388,8 +445,8 @@ export default function TestsPage() {
                 <div className="text-xs text-muted-foreground mb-1">
                   Поддерживается Markdown и формулы. Для дробей и математики используйте <code>$</code>: например <code>$\frac{1}{2}$</code> или <code>$$x^2 + y^2$$</code>.
                 </div>
-                <MathToolbar 
-                  onInsert={(t) => handleInsertMath(t, 'questionText')} 
+                <MathToolbar
+                  onInsert={(t) => handleInsertMath(t, 'questionText')}
                   onOpenVisualEditor={() => openVisualMathEditor('questionText')}
                 />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -450,8 +507,8 @@ export default function TestsPage() {
                       <div className="flex items-center justify-between">
                         <Label>Вариант {letter}</Label>
                         <div className="flex items-center gap-2">
-                          <MathToolbar 
-                            onInsert={(t) => handleInsertMath(t, key)} 
+                          <MathToolbar
+                            onInsert={(t) => handleInsertMath(t, key)}
                             onOpenVisualEditor={() => openVisualMathEditor(key)}
                           />
                           <button
@@ -485,8 +542,8 @@ export default function TestsPage() {
 
               <div className="space-y-2">
                 <Label>Объяснение ответа</Label>
-                <MathToolbar 
-                  onInsert={(t) => handleInsertMath(t, 'explanation')} 
+                <MathToolbar
+                  onInsert={(t) => handleInsertMath(t, 'explanation')}
                   onOpenVisualEditor={() => openVisualMathEditor('explanation')}
                 />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -530,10 +587,10 @@ export default function TestsPage() {
           </CardContent>
         </Card>
 
-        <VisualMathModal 
-          isOpen={mathModalOpen} 
-          onClose={() => setMathModalOpen(false)} 
-          onInsert={handleVisualMathInsert} 
+        <VisualMathModal
+          isOpen={mathModalOpen}
+          onClose={() => setMathModalOpen(false)}
+          onInsert={handleVisualMathInsert}
         />
       </div>
     );
@@ -557,7 +614,7 @@ export default function TestsPage() {
             {subjectLabel}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {languageLabel} • {gradeLabel} • {totalCount} вопросов
+            {languageLabel} • {gradeLabel}{questionTypeLabel ? ` • ${questionTypeLabel}` : ''} • {totalCount} вопросов
           </p>
         </div>
 
@@ -612,6 +669,14 @@ export default function TestsPage() {
                           {q.topic && (
                             <span className="inline-block mb-1.5 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                               {q.topic}
+                            </span>
+                          )}
+                          {q.question_type && (
+                            <span className={`inline-block mb-1.5 ml-1 rounded-md px-2 py-0.5 text-xs font-medium ${q.question_type === 'math'
+                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                                : 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+                              }`}>
+                              {q.question_type === 'math' ? 'Математика' : 'Логика'}
                             </span>
                           )}
                           <div className="font-medium text-foreground leading-relaxed">

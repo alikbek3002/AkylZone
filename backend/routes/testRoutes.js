@@ -12,6 +12,7 @@ const {
   buildResultTableName,
   loadQuestionCounts,
   buildStudentCatalog,
+  MATH_LOGIC_META,
 } = require('../lib/testCatalog');
 
 const router = express.Router();
@@ -137,14 +138,24 @@ async function authenticateStudent(req, res, next) {
   }
 }
 
-async function fetchRandomQuestionsStrict({ subject, language, grade, requiredCount }) {
-  const tableName = buildQuestionTableName(subject, language, grade);
-  const { data, error } = await supabase
+async function fetchRandomQuestionsStrict({ subject, language, grade, requiredCount, subjectTable, questionType }) {
+  // For math/logic, read from the unified mathlogic table with question_type filter
+  const actualTable = subjectTable || subject;
+  const tableName = buildQuestionTableName(actualTable, language, grade);
+
+  let query = supabase
     .from(tableName)
     .select('id, question_text, options, topic, explanation, image_url');
 
+  // Filter by question_type if this is a mathlogic table
+  if (questionType) {
+    query = query.eq('question_type', questionType);
+  }
+
+  const { data, error } = await query;
+
   if (error) {
-    const err = new Error(`Failed to load questions from table ${tableName}`);
+    const err = new Error(`Failed to load questions from table ${tableName}${questionType ? ` (type=${questionType})` : ''}`);
     err.cause = error;
     throw err;
   }
@@ -152,7 +163,7 @@ async function fetchRandomQuestionsStrict({ subject, language, grade, requiredCo
   const rows = data || [];
   if (rows.length < requiredCount) {
     const err = new Error(
-      `Not enough questions in ${tableName}: required ${requiredCount}, available ${rows.length}`,
+      `Not enough questions in ${tableName}${questionType ? ` (type=${questionType})` : ''}: required ${requiredCount}, available ${rows.length}`,
     );
     err.code = 'NOT_ENOUGH_QUESTIONS';
     err.meta = {
@@ -167,6 +178,9 @@ async function fetchRandomQuestionsStrict({ subject, language, grade, requiredCo
     ...row,
     subject,
     grade,
+    // Remember the actual table for answer lookups later
+    subject_table: actualTable,
+    question_type: questionType || null,
   }));
 }
 
@@ -392,8 +406,11 @@ router.post('/generate', async (req, res) => {
     const fetchPlan = [];
     let blockedLeaf = null;
 
+    // Valid MAIN subjects include both SUBJECTS and virtual math/logic
+    const validMainSubjects = [...SUBJECTS, 'math', 'logic'];
+
     if (normalizedType === 'MAIN') {
-      if (!SUBJECTS.includes(normalizedSubject)) {
+      if (!validMainSubjects.includes(normalizedSubject)) {
         return res.status(400).json({ error: 'Invalid subject for MAIN test' });
       }
 
@@ -427,6 +444,9 @@ router.post('/generate', async (req, res) => {
             subject: normalizedSubject,
             grade: line.grade,
             count: line.required,
+            // Pass through mathlogic table info
+            subjectTable: leaf.subject_table || null,
+            questionType: leaf.question_type || null,
           });
         }
       }
@@ -445,6 +465,9 @@ router.post('/generate', async (req, res) => {
               subject: subjectLeaf.id,
               grade: line.grade,
               count: line.required,
+              // Pass through mathlogic table info for math/logic subjects
+              subjectTable: subjectLeaf.subject_table || null,
+              questionType: subjectLeaf.question_type || null,
             });
           }
         }
@@ -474,13 +497,15 @@ router.post('/generate', async (req, res) => {
           language,
           grade: planItem.grade,
           requiredCount: planItem.count,
+          subjectTable: planItem.subjectTable,
+          questionType: planItem.questionType,
         })),
     );
 
     const questions = shuffle(groupedQuestions.flat());
     const breakdown = buildBreakdown(questions);
     const generatedMeta = {
-      schema_version: 3,
+      schema_version: 4,
       type: normalizedType,
       subject: normalizedType === 'MAIN' ? normalizedSubject : null,
       round: normalizedType === 'TRIAL' ? selectedRound : null,
@@ -488,6 +513,9 @@ router.post('/generate', async (req, res) => {
         id: question.id,
         subject: question.subject,
         grade: question.grade,
+        // Store the actual table and question_type for answer lookups
+        subject_table: question.subject_table || null,
+        question_type: question.question_type || null,
       })),
     };
 
@@ -586,7 +614,9 @@ router.post('/answer', async (req, res) => {
       return res.status(409).json({ error: 'Answer for this question is already locked' });
     }
 
-    const tableName = buildQuestionTableName(sessionItem.subject, req.student.language, sessionItem.grade);
+    // Use subject_table if available (for mathlogic), otherwise use subject
+    const actualSubject = sessionItem.subject_table || sessionItem.subject;
+    const tableName = buildQuestionTableName(actualSubject, req.student.language, sessionItem.grade);
     const { data: questionRow, error: questionError } = await supabase
       .from(tableName)
       .select('id, options, explanation')
