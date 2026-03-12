@@ -145,7 +145,7 @@ async function fetchRandomQuestionsStrict({ subject, language, grade, requiredCo
 
   let query = supabase
     .from(tableName)
-    .select('id, question_text, options, topic, explanation, image_url');
+    .select('id, question_text, options, topic, explanation, image_url, question_type');
 
   // Filter by question_type if this is a mathlogic table
   if (questionType) {
@@ -180,7 +180,7 @@ async function fetchRandomQuestionsStrict({ subject, language, grade, requiredCo
     grade,
     // Remember the actual table for answer lookups later
     subject_table: actualTable,
-    question_type: questionType || null,
+    question_type: row.question_type || questionType || null,
   }));
 }
 
@@ -460,15 +460,37 @@ router.post('/generate', async (req, res) => {
         blockedLeaf = roundLeaf || { id: selectedRound, status: 'locked', subjects: [] };
       } else {
         for (const subjectLeaf of roundLeaf.subjects) {
-          for (const line of subjectLeaf.lines) {
-            fetchPlan.push({
-              subject: subjectLeaf.id,
-              grade: line.grade,
-              count: line.required,
-              // Pass through mathlogic table info for math/logic subjects
-              subjectTable: subjectLeaf.subject_table || null,
-              questionType: subjectLeaf.question_type || null,
-            });
+          if (subjectLeaf.fetch_parts) {
+            for (const part of subjectLeaf.fetch_parts) {
+              if (part.prev > 0) {
+                fetchPlan.push({
+                  subject: part.subject,
+                  grade: studentGrade - 1,
+                  count: part.prev,
+                  subjectTable: part.table,
+                  questionType: part.questionType,
+                });
+              }
+              if (part.curr > 0) {
+                fetchPlan.push({
+                  subject: part.subject,
+                  grade: studentGrade,
+                  count: part.curr,
+                  subjectTable: part.table,
+                  questionType: part.questionType,
+                });
+              }
+            }
+          } else {
+            for (const line of subjectLeaf.lines) {
+              fetchPlan.push({
+                subject: subjectLeaf.id,
+                grade: line.grade,
+                count: line.required,
+                subjectTable: subjectLeaf.subject_table || null,
+                questionType: subjectLeaf.question_type || null,
+              });
+            }
           }
         }
       }
@@ -554,6 +576,7 @@ router.post('/generate', async (req, res) => {
         options: sanitizeOptionsForStudent(question.options),
         topic: question.topic || '',
         imageUrl: question.image_url || '',
+        question_type: question.question_type || null,
       })),
     });
   } catch (error) {

@@ -99,7 +99,7 @@ export default function TestPage() {
 
       if (e.key === 'PrintScreen' || e.code === 'PrintScreen' || e.key === 'Snapshot' || e.code === 'Snapshot') {
         e.preventDefault();
-        navigator.clipboard?.writeText('').catch(() => {});
+        navigator.clipboard?.writeText('').catch(() => { });
         handleScreenshotViolation();
         return;
       }
@@ -127,9 +127,9 @@ export default function TestPage() {
       if (isTrial && e.key === 'Escape') e.preventDefault();
     };
 
-    const handleVisibilityChange = () => {};
-    const handleBlur = () => {};
-    const handlePageHide = () => {};
+    const handleVisibilityChange = () => { };
+    const handleBlur = () => { };
+    const handlePageHide = () => { };
 
     // Mobile: block long-press context menu via touch
     let longPressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -297,15 +297,15 @@ export default function TestPage() {
   if (submitResult) {
     const scoreColor = submitResult.score >= 70
       ? 'text-emerald-600' : submitResult.score >= 40
-      ? 'text-amber-600' : 'text-rose-600';
+        ? 'text-amber-600' : 'text-rose-600';
 
     const scoreBg = submitResult.score >= 70
       ? 'bg-emerald-50 border-emerald-200' : submitResult.score >= 40
-      ? 'bg-amber-50 border-amber-200' : 'bg-rose-50 border-rose-200';
+        ? 'bg-amber-50 border-amber-200' : 'bg-rose-50 border-rose-200';
 
     const scoreIconBg = submitResult.score >= 70
       ? 'bg-emerald-100 text-emerald-600' : submitResult.score >= 40
-      ? 'bg-amber-100 text-amber-600' : 'bg-rose-100 text-rose-600';
+        ? 'bg-amber-100 text-amber-600' : 'bg-rose-100 text-rose-600';
 
     return (
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-50 px-4">
@@ -603,9 +603,31 @@ export default function TestPage() {
           )}
 
           <div className="border-b border-stone-100 px-3.5 py-3 sm:px-6 sm:py-6">
-            <h2 className="text-base sm:text-xl font-medium leading-relaxed text-black">
-              <MarkdownRenderer content={currentQuestion?.text || ''} />
-            </h2>
+            <div className="flex flex-col gap-2">
+              {(currentQuestion?.question_type || currentQuestion?.topic) && (
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  {currentQuestion?.question_type && (
+                    <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${currentQuestion.question_type === 'math'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-purple-100 text-purple-700'
+                      }`}>
+                      {localizeUi(student?.language,
+                        currentQuestion.question_type === 'math' ? 'Математика' : 'Логика',
+                        currentQuestion.question_type === 'math' ? 'Математика' : 'Логика'
+                      )}
+                    </span>
+                  )}
+                  {currentQuestion?.topic && (
+                    <span className="inline-block rounded-md bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-600">
+                      {currentQuestion.topic}
+                    </span>
+                  )}
+                </div>
+              )}
+              <h2 className="text-base sm:text-xl font-medium leading-relaxed text-black">
+                <MarkdownRenderer content={currentQuestion?.text || ''} />
+              </h2>
+            </div>
           </div>
 
           <div className="px-3.5 py-3.5 sm:px-6 sm:py-6">

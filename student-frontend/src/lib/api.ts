@@ -86,6 +86,7 @@ export interface GeneratedQuestion {
   options: Array<{ text: string }>;
   topic: string;
   imageUrl: string;
+  question_type?: 'math' | 'logic';
 }
 
 export interface GeneratedTestResponse {

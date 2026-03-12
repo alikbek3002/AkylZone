@@ -33,8 +33,15 @@ function getTrialStructure(studentGrade) {
           kg: '1-2 тур суроолору (80 суроо)',
         },
         subjects: [
-          { id: 'math', table: 'mathlogic', questionType: 'math', total: 25, prev: 0, curr: 25 },
-          { id: 'logic', table: 'mathlogic', questionType: 'logic', total: 15, prev: 0, curr: 15 },
+          {
+            id: 'mathlogic',
+            isCombo: true,
+            total: 40,
+            parts: [
+              { id: 'math', table: 'mathlogic', questionType: 'math', prev: 0, curr: 25 },
+              { id: 'logic', table: 'mathlogic', questionType: 'logic', prev: 0, curr: 15 }
+            ]
+          },
           { id: 'kyrgyz', total: 15, prev: 7, curr: 8 },
           { id: 'russian', total: 15, prev: 7, curr: 8 },
           { id: 'history', total: 10, prev: 5, curr: 5 },
@@ -46,8 +53,15 @@ function getTrialStructure(studentGrade) {
           kg: '3 тур суроолору (80 суроо)',
         },
         subjects: [
-          { id: 'math', table: 'mathlogic', questionType: 'math', total: 25, prev: 0, curr: 25 },
-          { id: 'logic', table: 'mathlogic', questionType: 'logic', total: 15, prev: 0, curr: 15 },
+          {
+            id: 'mathlogic',
+            isCombo: true,
+            total: 40,
+            parts: [
+              { id: 'math', table: 'mathlogic', questionType: 'math', prev: 0, curr: 25 },
+              { id: 'logic', table: 'mathlogic', questionType: 'logic', prev: 0, curr: 15 }
+            ]
+          },
           { id: 'kyrgyz', total: 20, prev: 10, curr: 10 },
           { id: 'english', total: 20, prev: 10, curr: 10 },
         ],
@@ -63,8 +77,15 @@ function getTrialStructure(studentGrade) {
         kg: '1-2 тур суроолору (80 суроо)',
       },
       subjects: [
-        { id: 'math', table: 'mathlogic', questionType: 'math', total: 25, prev: 12, curr: 13 },
-        { id: 'logic', table: 'mathlogic', questionType: 'logic', total: 15, prev: 7, curr: 8 },
+        {
+          id: 'mathlogic',
+          isCombo: true,
+          total: 40,
+          parts: [
+            { id: 'math', table: 'mathlogic', questionType: 'math', prev: 12, curr: 13 },
+            { id: 'logic', table: 'mathlogic', questionType: 'logic', prev: 7, curr: 8 }
+          ]
+        },
         { id: 'kyrgyz', total: 15, prev: 7, curr: 8 },
         { id: 'russian', total: 15, prev: 7, curr: 8 },
         { id: 'history', total: 10, prev: 5, curr: 5 },
@@ -76,8 +97,15 @@ function getTrialStructure(studentGrade) {
         kg: '3 тур суроолору (80 суроо)',
       },
       subjects: [
-        { id: 'math', table: 'mathlogic', questionType: 'math', total: 25, prev: 12, curr: 13 },
-        { id: 'logic', table: 'mathlogic', questionType: 'logic', total: 15, prev: 7, curr: 8 },
+        {
+          id: 'mathlogic',
+          isCombo: true,
+          total: 40,
+          parts: [
+            { id: 'math', table: 'mathlogic', questionType: 'math', prev: 12, curr: 13 },
+            { id: 'logic', table: 'mathlogic', questionType: 'logic', prev: 7, curr: 8 }
+          ]
+        },
         { id: 'kyrgyz', total: 20, prev: 10, curr: 10 },
         { id: 'english', total: 20, prev: 10, curr: 10 },
       ],
@@ -211,48 +239,22 @@ function getMathLogicCount(countsByTable, language, grade, questionType) {
 
 function buildMainSubjects(grade, language, countsByTable) {
   const prevGrade = grade - 1;
-  const regularSubjects = ['history', 'english', 'russian', 'kyrgyz'];
+  const regularSubjects = ['history', 'english', 'russian', 'kyrgyz', 'mathlogic'];
 
   const items = [];
 
-  // Regular subjects: same as before with prev+curr grades
+  // All subjects including mathlogic (which will just pull from both types randomly for the whole 125 limit)
   for (const subjectId of regularSubjects) {
+    // Mathlogic is only for grades 6 and 7
+    if (subjectId === 'mathlogic' && grade < 6) continue;
+
     const prevAvailable = countsByTable[getCountKey(subjectId, language, prevGrade)] || 0;
     const currentAvailable = countsByTable[getCountKey(subjectId, language, grade)] || 0;
-    const lines = [
-      {
-        grade: prevGrade,
-        required: MAIN_QUESTIONS_PER_GRADE,
-        available: prevAvailable,
-        label: getMainGradeLineLabel(language, prevGrade, MAIN_QUESTIONS_PER_GRADE),
-      },
-      {
-        grade,
-        required: MAIN_QUESTIONS_PER_GRADE,
-        available: currentAvailable,
-        label: getMainGradeLineLabel(language, grade, MAIN_QUESTIONS_PER_GRADE),
-      },
-    ];
-    const status = lines.every((line) => line.available >= line.required) ? 'ready' : 'locked';
 
-    items.push({
-      id: subjectId,
-      title: getSubjectName(subjectId, language),
-      required_total: MAIN_QUESTIONS_PER_GRADE * 2,
-      available_total: prevAvailable + currentAvailable,
-      status,
-      lines,
-    });
-  }
-
-  // Mathlogic: show as two separate items (math & logic) for the student UI
-  // Grade 6: only grade 6 questions
-  // Grade 7: grades 6 + 7
-  for (const qType of ['math', 'logic']) {
-    if (grade === 6) {
-      // Only current grade (6)
-      const currentAvailable = getMathLogicCount(countsByTable, language, grade, qType);
-      const lines = [
+    let lines = [];
+    if (subjectId === 'mathlogic' && grade === 6) {
+      // Only current grade (6) for mathlogic
+      lines = [
         {
           grade,
           required: MAIN_QUESTIONS_PER_GRADE,
@@ -260,23 +262,8 @@ function buildMainSubjects(grade, language, countsByTable) {
           label: getMainGradeLineLabel(language, grade, MAIN_QUESTIONS_PER_GRADE),
         },
       ];
-      const status = lines.every((line) => line.available >= line.required) ? 'ready' : 'locked';
-
-      items.push({
-        id: qType,
-        title: getSubjectName(qType, language),
-        subject_table: 'mathlogic',
-        question_type: qType,
-        required_total: MAIN_QUESTIONS_PER_GRADE,
-        available_total: currentAvailable,
-        status,
-        lines,
-      });
     } else {
-      // Grade 7: prev (6) + curr (7)
-      const prevAvailable = getMathLogicCount(countsByTable, language, prevGrade, qType);
-      const currentAvailable = getMathLogicCount(countsByTable, language, grade, qType);
-      const lines = [
+      lines = [
         {
           grade: prevGrade,
           required: MAIN_QUESTIONS_PER_GRADE,
@@ -290,19 +277,19 @@ function buildMainSubjects(grade, language, countsByTable) {
           label: getMainGradeLineLabel(language, grade, MAIN_QUESTIONS_PER_GRADE),
         },
       ];
-      const status = lines.every((line) => line.available >= line.required) ? 'ready' : 'locked';
-
-      items.push({
-        id: qType,
-        title: getSubjectName(qType, language),
-        subject_table: 'mathlogic',
-        question_type: qType,
-        required_total: MAIN_QUESTIONS_PER_GRADE * 2,
-        available_total: prevAvailable + currentAvailable,
-        status,
-        lines,
-      });
     }
+
+    const status = lines.every((line) => line.available >= line.required) ? 'ready' : 'locked';
+
+    items.push({
+      id: subjectId,
+      title: getSubjectName(subjectId, language),
+      ...(subjectId === 'mathlogic' ? { subject_table: 'mathlogic' } : {}),
+      required_total: lines.reduce((sum, line) => sum + line.required, 0),
+      available_total: lines.reduce((sum, line) => sum + line.available, 0),
+      status,
+      lines,
+    });
   }
 
   return items;
@@ -316,38 +303,56 @@ function buildTrialRounds(grade, language, countsByTable) {
     const subjects = config.subjects.map((subjectConfig) => {
       let lines;
 
-      if (subjectConfig.table === 'mathlogic') {
-        // Math/logic from the unified mathlogic table
-        if (subjectConfig.prev === 0) {
-          // Grade 6: all from current grade
-          const currentAvailable = getMathLogicCount(countsByTable, language, grade, subjectConfig.questionType);
+      if (subjectConfig.isCombo) {
+        let totalPrevAvailable = 0;
+        let totalCurrAvailable = 0;
+        let totalPrevRequired = 0;
+        let totalCurrRequired = 0;
+
+        const internalParts = [];
+
+        for (const part of subjectConfig.parts) {
+          totalPrevRequired += part.prev;
+          totalCurrRequired += part.curr;
+          const partPrevAvail = getMathLogicCount(countsByTable, language, prevGrade, part.questionType);
+          const partCurrAvail = getMathLogicCount(countsByTable, language, grade, part.questionType);
+          totalPrevAvailable += partPrevAvail;
+          totalCurrAvailable += partCurrAvail;
+
+          internalParts.push({
+            subject: part.id,
+            table: part.table,
+            questionType: part.questionType,
+            prev: part.prev,
+            curr: part.curr,
+            prevAvail: partPrevAvail,
+            currAvail: partCurrAvail
+          });
+        }
+
+        if (totalPrevRequired === 0) {
           lines = [
-            {
-              grade,
-              required: subjectConfig.curr,
-              available: currentAvailable,
-              label: getTrialGradeLineLabel(language, grade, subjectConfig.curr),
-            },
+            { grade, required: totalCurrRequired, available: totalCurrAvailable, label: getTrialGradeLineLabel(language, grade, totalCurrRequired) }
           ];
         } else {
-          // Grade 7: mix of prev + current
-          const prevAvailable = getMathLogicCount(countsByTable, language, prevGrade, subjectConfig.questionType);
-          const currentAvailable = getMathLogicCount(countsByTable, language, grade, subjectConfig.questionType);
           lines = [
-            {
-              grade: prevGrade,
-              required: subjectConfig.prev,
-              available: prevAvailable,
-              label: getTrialGradeLineLabel(language, prevGrade, subjectConfig.prev),
-            },
-            {
-              grade,
-              required: subjectConfig.curr,
-              available: currentAvailable,
-              label: getTrialGradeLineLabel(language, grade, subjectConfig.curr),
-            },
-          ];
+            { grade: prevGrade, required: totalPrevRequired, available: totalPrevAvailable, label: getTrialGradeLineLabel(language, prevGrade, totalPrevRequired) },
+            { grade, required: totalCurrRequired, available: totalCurrAvailable, label: getTrialGradeLineLabel(language, grade, totalCurrRequired) }
+          ]
         }
+
+        const isReady = internalParts.every(p => p.prevAvail >= p.prev && p.currAvail >= p.curr);
+
+        return {
+          id: subjectConfig.id,
+          title: getTrialSubjectLabel(language, subjectConfig.id, subjectConfig.total),
+          display_name: getSubjectName(subjectConfig.id, language),
+          required_total: subjectConfig.total,
+          available_total: lines.reduce((sum, line) => sum + Math.min(line.available, line.required), 0),
+          status: isReady ? 'ready' : 'locked',
+          lines,
+          fetch_parts: internalParts
+        };
       } else {
         // Regular subjects
         const prevAvailable = countsByTable[getCountKey(subjectConfig.id, language, prevGrade)] || 0;
