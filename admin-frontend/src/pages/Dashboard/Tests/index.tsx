@@ -545,8 +545,8 @@ export default function TestsPage() {
                       <div
                         key={letter}
                         className={`rounded-xl border-2 p-3 transition-all ${isCorrect
-                            ? 'border-green-300 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30'
-                            : 'border-border bg-card'
+                          ? 'border-green-300 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30'
+                          : 'border-border bg-card'
                           }`}
                       >
                         <div className="flex items-center justify-between mb-2">
@@ -557,8 +557,8 @@ export default function TestsPage() {
                             type="button"
                             onClick={() => setFormData((p) => ({ ...p, correctOption: letter }))}
                             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-all ${isCorrect
-                                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                                : 'bg-muted text-muted-foreground hover:bg-muted/80 cursor-pointer'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                              : 'bg-muted text-muted-foreground hover:bg-muted/80 cursor-pointer'
                               }`}
                           >
                             {isCorrect ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
@@ -732,7 +732,7 @@ export default function TestsPage() {
                               {q.question_type === 'math' ? 'Математика' : 'Логика'}
                             </span>
                           )}
-                          <div className="font-medium text-foreground leading-relaxed">
+                          <div className="font-medium text-foreground leading-relaxed whitespace-pre-wrap">
                             <MarkdownRenderer content={q.question_text} />
                           </div>
                         </div>

@@ -206,6 +206,20 @@ export function deleteStudent(studentId: string) {
   return request<null>(`/admin/students/${studentId}`, 'DELETE');
 }
 
+export async function updateStudent(
+  studentId: string,
+  payload: {
+    fullName?: string;
+    grade?: number;
+    language?: string;
+    username?: string;
+    password?: string;
+  },
+) {
+  const response = await request<StudentResponse>(`/admin/students/${studentId}`, 'PATCH', payload);
+  return response.student;
+}
+
 // ─── Questions ──────────────────────────────────────────────────────────────
 
 export function addQuestion(payload: AddQuestionPayload) {

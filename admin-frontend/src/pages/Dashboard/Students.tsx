@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, EyeOff, Edit, Trash2, Search, UserPlus } from "lucide-react";
+import { Eye, EyeOff, Edit, Trash2, Search, UserPlus, X, Save, Loader2 } from "lucide-react";
 import {
     Table,
     TableBody,
@@ -10,8 +10,9 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { GenerateStudentModal, type GeneratedStudentPayload } from "@/components/modals/GenerateStudentModal";
-import { createStudent, deleteStudent, fetchStudents, type Student } from "@/lib/api";
+import { createStudent, deleteStudent, fetchStudents, updateStudent, type Student } from "@/lib/api";
 import { toast } from "sonner";
 
 const PasswordCell = ({ password }: { password: string }) => {
@@ -51,6 +52,18 @@ export default function StudentsPage() {
     const [languageFilter, setLanguageFilter] = useState("all");
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Edit state
+    const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+    const [editForm, setEditForm] = useState({
+        fullName: "",
+        grade: 6,
+        language: "ru" as "ru" | "kg",
+        username: "",
+        password: "",
+    });
+    const [editLoading, setEditLoading] = useState(false);
+    const [showEditPassword, setShowEditPassword] = useState(false);
 
     const filteredStudents = useMemo(() => {
         return students.filter((student) => {
@@ -115,6 +128,71 @@ export default function StudentsPage() {
                 const message = error instanceof Error ? error.message : "Не удалось удалить ученика";
                 toast.error(message);
             }
+        }
+    };
+
+    const handleOpenEdit = (student: Student) => {
+        setEditingStudent(student);
+        setEditForm({
+            fullName: student.fullName,
+            grade: student.grade,
+            language: student.language.toLowerCase() === "kg" ? "kg" : "ru",
+            username: student.username,
+            password: "",
+        });
+        setShowEditPassword(false);
+    };
+
+    const handleCloseEdit = () => {
+        setEditingStudent(null);
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editingStudent) return;
+        setEditLoading(true);
+        try {
+            const payload: {
+                fullName?: string;
+                grade?: number;
+                language?: string;
+                username?: string;
+                password?: string;
+            } = {};
+
+            if (editForm.fullName !== editingStudent.fullName) {
+                payload.fullName = editForm.fullName;
+            }
+            if (editForm.grade !== editingStudent.grade) {
+                payload.grade = editForm.grade;
+            }
+            const currentLang = editingStudent.language.toLowerCase() === "kg" ? "kg" : "ru";
+            if (editForm.language !== currentLang) {
+                payload.language = editForm.language;
+            }
+            if (editForm.username !== editingStudent.username) {
+                payload.username = editForm.username;
+            }
+            if (editForm.password.trim()) {
+                payload.password = editForm.password.trim();
+            }
+
+            if (Object.keys(payload).length === 0) {
+                toast.info("Нет изменений для сохранения");
+                handleCloseEdit();
+                return;
+            }
+
+            const updated = await updateStudent(editingStudent.id, payload);
+            setStudents((prev) =>
+                prev.map((s) => (s.id === editingStudent.id ? updated : s))
+            );
+            toast.success("Данные ученика обновлены");
+            handleCloseEdit();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Не удалось обновить ученика";
+            toast.error(message);
+        } finally {
+            setEditLoading(false);
         }
     };
 
@@ -224,6 +302,7 @@ export default function StudentsPage() {
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
+                                                onClick={() => handleOpenEdit(student)}
                                                 className="text-muted-foreground hover:text-primary transition-colors h-8 w-8"
                                             >
                                                 <Edit className="h-4 w-4" />
@@ -250,6 +329,130 @@ export default function StudentsPage() {
                     </p>
                 </div>
             </div>
+
+            {/* Edit Student Modal */}
+            {editingStudent && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-lg bg-card rounded-2xl border border-border shadow-2xl overflow-hidden">
+                        <div className="flex items-center justify-between p-5 border-b border-border">
+                            <h3 className="text-lg font-bold">Редактирование ученика</h3>
+                            <button
+                                onClick={handleCloseEdit}
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div className="space-y-2">
+                                <Label>ФИО</Label>
+                                <Input
+                                    value={editForm.fullName}
+                                    onChange={(e) => setEditForm((p) => ({ ...p, fullName: e.target.value }))}
+                                    placeholder="Полное имя ученика"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Класс</Label>
+                                    <div className="flex gap-2">
+                                        {[6, 7].map((g) => (
+                                            <button
+                                                key={g}
+                                                type="button"
+                                                onClick={() => setEditForm((p) => ({ ...p, grade: g }))}
+                                                className={`flex-1 rounded-xl border-2 px-4 py-2.5 text-sm font-medium transition-all ${editForm.grade === g
+                                                        ? 'border-primary bg-primary text-primary-foreground'
+                                                        : 'border-border bg-card hover:border-primary/50'
+                                                    }`}
+                                            >
+                                                {g} класс
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label>Язык</Label>
+                                    <div className="flex gap-2">
+                                        {([{ id: "ru", label: "Русский" }, { id: "kg", label: "Кыргыз" }] as const).map((l) => (
+                                            <button
+                                                key={l.id}
+                                                type="button"
+                                                onClick={() => setEditForm((p) => ({ ...p, language: l.id }))}
+                                                className={`flex-1 rounded-xl border-2 px-3 py-2.5 text-xs sm:text-sm font-medium transition-all truncate ${editForm.language === l.id
+                                                        ? 'border-primary bg-primary text-primary-foreground'
+                                                        : 'border-border bg-card hover:border-primary/50'
+                                                    }`}
+                                            >
+                                                {l.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Логин</Label>
+                                <Input
+                                    value={editForm.username}
+                                    onChange={(e) => setEditForm((p) => ({ ...p, username: e.target.value }))}
+                                    placeholder="Логин ученика"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <Label>Новый пароль</Label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowEditPassword(!showEditPassword)}
+                                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                    >
+                                        {showEditPassword ? "Скрыть" : "Показать"}
+                                    </button>
+                                </div>
+                                <Input
+                                    type={showEditPassword ? "text" : "password"}
+                                    value={editForm.password}
+                                    onChange={(e) => setEditForm((p) => ({ ...p, password: e.target.value }))}
+                                    placeholder="Оставьте пустым, чтобы не менять"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Если оставить пустым, пароль не изменится.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 p-5 border-t border-border">
+                            <Button
+                                variant="secondary"
+                                onClick={handleCloseEdit}
+                                className="flex-1"
+                            >
+                                Отмена
+                            </Button>
+                            <Button
+                                onClick={handleSaveEdit}
+                                disabled={editLoading || !editForm.fullName.trim() || !editForm.username.trim()}
+                                className="flex-1"
+                            >
+                                {editLoading ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        Сохранение...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save className="h-4 w-4 mr-2" />
+                                        Сохранить
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
