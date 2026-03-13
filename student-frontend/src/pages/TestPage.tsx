@@ -238,6 +238,8 @@ export default function TestPage() {
   const handleAnswerSelect = async (selectedIndex: number) => {
     if (isAnswering || currentReveal || !currentQuestion) return;
 
+    // Optimistic: show selection immediately before API call
+    setSelectedAnswers((prev) => ({ ...prev, [currentQuestion.id]: selectedIndex }));
     setIsAnswering(true);
     setApiError(null);
 
@@ -249,9 +251,14 @@ export default function TestPage() {
         selected_index: selectedIndex,
       });
 
-      setSelectedAnswers((prev) => ({ ...prev, [currentQuestion.id]: selectedIndex }));
       setRevealedAnswers((prev) => ({ ...prev, [currentQuestion.id]: reveal }));
     } catch (error) {
+      // Rollback optimistic selection on error
+      setSelectedAnswers((prev) => {
+        const next = { ...prev };
+        delete next[currentQuestion.id];
+        return next;
+      });
       setApiError(error instanceof Error ? error.message : 'Ошибка проверки ответа');
     } finally {
       setIsAnswering(false);
@@ -608,8 +615,8 @@ export default function TestPage() {
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                   {currentQuestion?.question_type && (
                     <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${currentQuestion.question_type === 'math'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-purple-100 text-purple-700'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-purple-100 text-purple-700'
                       }`}>
                       {localizeUi(student?.language,
                         currentQuestion.question_type === 'math' ? 'Математика' : 'Логика',
@@ -636,11 +643,15 @@ export default function TestPage() {
                 const isSelected = currentSelectedIndex === index;
                 const isCorrect = currentReveal?.correct_index === index;
                 const isAnswered = Boolean(currentReveal);
+                const isPending = isAnswering && isSelected;
 
                 let optionClassName = 'border-stone-200 bg-white hover:border-black active:scale-[0.98]';
                 let badgeClassName = 'border-stone-300 bg-white text-stone-500';
 
-                if (isAnswered) {
+                if (isPending) {
+                  optionClassName = 'border-black bg-stone-50 text-black animate-pulse';
+                  badgeClassName = 'border-black bg-black text-white';
+                } else if (isAnswered) {
                   if (isCorrect) {
                     optionClassName = 'border-emerald-500 bg-emerald-50 text-emerald-950';
                     badgeClassName = 'border-emerald-600 bg-emerald-500 text-white';
