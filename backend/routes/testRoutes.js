@@ -529,7 +529,28 @@ router.post('/generate', async (req, res) => {
         })),
     );
 
-    const questions = shuffle(groupedQuestions.flat());
+    let questions = groupedQuestions.flat();
+
+    if (normalizedType === 'TRIAL') {
+      const questionsBySubject = {};
+      const subjectOrder = [];
+
+      for (const q of questions) {
+        if (!questionsBySubject[q.subject]) {
+          questionsBySubject[q.subject] = [];
+          subjectOrder.push(q.subject);
+        }
+        questionsBySubject[q.subject].push(q);
+      }
+
+      questions = [];
+      for (const sub of subjectOrder) {
+        questions.push(...shuffle(questionsBySubject[sub]));
+      }
+    } else {
+      questions = shuffle(questions);
+    }
+
     const breakdown = buildBreakdown(questions);
     const generatedMeta = {
       schema_version: 4,
