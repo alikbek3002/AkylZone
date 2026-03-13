@@ -29,17 +29,17 @@ function getTrialStructure(studentGrade) {
     return {
       1: {
         title: {
-          ru: '1-2 тур (80 вопросов)',
-          kg: '1-2 тур суроолору (80 суроо)',
+          ru: '1-2 тур (75 вопросов)',
+          kg: '1-2 тур суроолору (75 суроо)',
         },
         subjects: [
           {
             id: 'mathlogic',
             isCombo: true,
-            total: 40,
+            total: 35,
             parts: [
               { id: 'math', table: 'mathlogic', questionType: 'math', prev: 0, curr: 25 },
-              { id: 'logic', table: 'mathlogic', questionType: 'logic', prev: 0, curr: 15 }
+              { id: 'logic', table: 'mathlogic', questionType: 'logic', prev: 0, curr: 10 }
             ]
           },
           { id: 'kyrgyz', total: 15, prev: 7, curr: 8 },
@@ -73,17 +73,17 @@ function getTrialStructure(studentGrade) {
   return {
     1: {
       title: {
-        ru: '1-2 тур (80 вопросов)',
-        kg: '1-2 тур суроолору (80 суроо)',
+        ru: '1-2 тур (75 вопросов)',
+        kg: '1-2 тур суроолору (75 суроо)',
       },
       subjects: [
         {
           id: 'mathlogic',
           isCombo: true,
-          total: 40,
+          total: 35,
           parts: [
             { id: 'math', table: 'mathlogic', questionType: 'math', prev: 12, curr: 13 },
-            { id: 'logic', table: 'mathlogic', questionType: 'logic', prev: 7, curr: 8 }
+            { id: 'logic', table: 'mathlogic', questionType: 'logic', prev: 5, curr: 5 }
           ]
         },
         { id: 'kyrgyz', total: 15, prev: 7, curr: 8 },
