@@ -41,6 +41,15 @@ export interface TrialTreeSubject {
   available_total: number;
   status: 'ready' | 'locked';
   lines: TreeLine[];
+  fetch_parts?: {
+    subject: string;
+    table: string;
+    questionType: 'math' | 'logic';
+    curr: number;
+    prev: number;
+    required?: number;
+    available?: number;
+  }[];
 }
 
 export interface TrialTreeRound {

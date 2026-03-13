@@ -88,6 +88,7 @@ export default function TestsPage() {
     optionD: '',
     correctOption: 'A',
     imageUrl: '',
+    questionType: 'math',
   });
   const [formLoading, setFormLoading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
@@ -133,6 +134,7 @@ export default function TestsPage() {
       optionD: '',
       correctOption: 'A',
       imageUrl: '',
+      questionType: 'math',
     });
     setEditingQuestion(null);
   };
@@ -156,6 +158,7 @@ export default function TestsPage() {
       optionD: q.options[3]?.text || '',
       correctOption: letters[correctIdx] || 'A',
       imageUrl: q.image_url || '',
+      questionType: q.question_type || 'math',
     });
     setView('edit');
   };
@@ -232,7 +235,7 @@ export default function TestsPage() {
       };
       // Add questionType for mathlogic
       if (subject === 'mathlogic') {
-        payload.questionType = questionType || 'math';
+        payload.questionType = formData.questionType;
       }
       await addQuestion(payload);
       toast.success('Вопрос добавлен');
@@ -262,7 +265,7 @@ export default function TestsPage() {
       };
       // Add questionType for mathlogic
       if (subject === 'mathlogic') {
-        payload.questionType = questionType || editingQuestion?.question_type || 'math';
+        payload.questionType = formData.questionType;
       }
       await updateQuestion(editingQuestion.id, payload);
       toast.success('Вопрос обновлён');
@@ -350,24 +353,26 @@ export default function TestsPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-base font-semibold">Язык</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {LANGUAGES.map((l) => (
-                    <button
-                      key={l.id}
-                      onClick={() => setLanguage(l.id)}
-                      className={`rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all ${language === l.id
-                        ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-border bg-card hover:border-primary/50'
-                        }`}
-                    >
-                      {l.label}
-                    </button>
-                  ))}
+            <div className={`grid gap-4 ${subject === 'mathlogic' ? 'grid-cols-1' : 'grid-cols-2'}`}>
+              {subject !== 'mathlogic' && (
+                <div className="space-y-2">
+                  <Label className="text-base font-semibold">Язык</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {LANGUAGES.map((l) => (
+                      <button
+                        key={l.id}
+                        onClick={() => setLanguage(l.id)}
+                        className={`rounded-xl border-2 px-3 py-3 text-xs sm:text-sm font-medium transition-all truncate ${language === l.id
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-card hover:border-primary/50'
+                          }`}
+                      >
+                        {l.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="space-y-2">
                 <Label className="text-base font-semibold">Класс</Label>
@@ -387,6 +392,10 @@ export default function TestsPage() {
                 </div>
               </div>
             </div>
+
+            {subject === 'mathlogic' && (
+              <p className="text-xs text-muted-foreground italic">Математика и Логика используют единую таблицу (русский язык).</p>
+            )}
 
             <Button
               onClick={() => setView('list')}
@@ -439,6 +448,34 @@ export default function TestsPage() {
                   placeholder="Например: Дроби, Падежи, Past Simple..."
                 />
               </div>
+
+              {subject === 'mathlogic' && (
+                <div className="space-y-2">
+                  <Label>Тип вопроса *</Label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormData((p) => ({ ...p, questionType: 'math' }))}
+                      className={`flex-1 rounded-xl border-2 px-4 py-2.5 text-sm font-medium transition-all ${formData.questionType === 'math'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-700'
+                          : 'border-border bg-card hover:border-blue-300'
+                        }`}
+                    >
+                      Математика
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData((p) => ({ ...p, questionType: 'logic' }))}
+                      className={`flex-1 rounded-xl border-2 px-4 py-2.5 text-sm font-medium transition-all ${formData.questionType === 'logic'
+                          ? 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-700'
+                          : 'border-border bg-card hover:border-purple-300'
+                        }`}
+                    >
+                      Логика
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>Текст вопроса *</Label>
@@ -673,8 +710,8 @@ export default function TestsPage() {
                           )}
                           {q.question_type && (
                             <span className={`inline-block mb-1.5 ml-1 rounded-md px-2 py-0.5 text-xs font-medium ${q.question_type === 'math'
-                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                                : 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                              : 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
                               }`}>
                               {q.question_type === 'math' ? 'Математика' : 'Логика'}
                             </span>

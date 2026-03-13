@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { fetchAvailableTests, generateStudentTest, type AvailableTrialNode, type TrialTreeRound } from '../lib/api';
-import { ArrowLeft, Layers, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Layers, Sparkles, AlertCircle, Loader2, ShieldAlert } from 'lucide-react';
 import logo from '../assets/logo.jpg';
 
 function localizeUi(language: 'ru' | 'kg' | undefined, ruText: string, kgText: string) {
@@ -19,6 +19,7 @@ export default function TrialTestSelectionPage() {
 
     const [selectedRound, setSelectedRound] = useState<TrialTreeRound | null>(null);
     const [generating, setGenerating] = useState(false);
+    const [showConfirm, setShowConfirm] = useState(false);
 
     useEffect(() => {
         if (!token) {
@@ -48,6 +49,7 @@ export default function TrialTestSelectionPage() {
 
     const handleStartTest = async () => {
         if (!token || !selectedRound) return;
+        setShowConfirm(false);
 
         try {
             const el = document.documentElement;
@@ -76,6 +78,11 @@ export default function TrialTestSelectionPage() {
             setGenerating(false);
             try { document.exitFullscreen?.(); } catch { }
         }
+    };
+
+    const handleClickStart = () => {
+        if (!selectedRound) return;
+        setShowConfirm(true);
     };
 
     if (loading) {
@@ -145,11 +152,30 @@ export default function TrialTestSelectionPage() {
                                 </div>
 
                                 <div className="w-full grid grid-cols-2 gap-2">
-                                    {round.subjects.map(subj => (
-                                        <div key={subj.id} className={`text-xs sm:text-sm font-medium text-left ${selectedRound?.id === round.id ? 'text-stone-400' : 'text-stone-500'}`}>
-                                            {subj.display_name} ({subj.available_total}<span className="opacity-50">/{subj.required_total}</span>)
-                                        </div>
-                                    ))}
+                                    {round.subjects.map(subj => {
+                                        if (subj.fetch_parts && subj.fetch_parts.length > 0) {
+                                            return subj.fetch_parts.map((part: any, idx: number) => {
+                                                const partName = localizeUi(
+                                                    student?.language,
+                                                    part.questionType === 'math' ? 'Математика' : 'Логика',
+                                                    part.questionType === 'math' ? 'Математика' : 'Логика'
+                                                );
+                                                const required = part.required || (part.prev + part.curr);
+                                                const available = part.available || part.required || (part.prev + part.curr);
+                                                return (
+                                                    <div key={`${subj.id}-${idx}`} className={`text-xs sm:text-sm font-medium text-left ${selectedRound?.id === round.id ? 'text-stone-400' : 'text-stone-500'}`}>
+                                                        {partName} ({available}<span className="opacity-50">/{required}</span>)
+                                                    </div>
+                                                );
+                                            });
+                                        }
+
+                                        return (
+                                            <div key={subj.id} className={`text-xs sm:text-sm font-medium text-left ${selectedRound?.id === round.id ? 'text-stone-400' : 'text-stone-500'}`}>
+                                                {subj.display_name} ({subj.available_total}<span className="opacity-50">/{subj.required_total}</span>)
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </button>
                         ))}
@@ -160,7 +186,7 @@ export default function TrialTestSelectionPage() {
                 {selectedRound && (
                     <div className="pb-8 sm:pb-12">
                         <button
-                            onClick={handleStartTest}
+                            onClick={handleClickStart}
                             disabled={generating}
                             className="w-full sm:max-w-sm sm:mx-auto flex h-14 sm:h-16 items-center justify-center gap-3 rounded-2xl bg-black px-8 text-base sm:text-lg font-bold text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
                         >
@@ -176,6 +202,52 @@ export default function TrialTestSelectionPage() {
                                 </>
                             )}
                         </button>
+                    </div>
+                )}
+
+                {/* Warning Confirmation Modal */}
+                {showConfirm && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                        <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-500">
+                                    <ShieldAlert className="h-6 w-6" />
+                                </div>
+                                <h2 className="text-xl font-bold text-stone-900">
+                                    {localizeUi(student?.language, 'Внимание!', 'Көңүл буруңуз!')}
+                                </h2>
+                            </div>
+                            <div className="space-y-3 mb-6">
+                                <p className="text-sm text-stone-600 leading-relaxed">
+                                    {localizeUi(
+                                        student?.language,
+                                        'После начала теста вы не сможете выйти из полноэкранного режима. Переключение вкладок, скриншоты и другие действия будут отслеживаться.',
+                                        'Тест башталгандан кийин толук экран режиминен чыгууга болбойт. Табдарды алмаштыруу, скриншоттор жана башка аракеттер көзөмөлдөнөт.'
+                                    )}
+                                </p>
+                                <p className="text-sm text-stone-600 leading-relaxed font-medium">
+                                    {localizeUi(
+                                        student?.language,
+                                        'Убедитесь, что вы готовы пройти тест до конца.',
+                                        'Тестти аягына чейин тапшырууга даяр экениңизди текшериңиз.'
+                                    )}
+                                </p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowConfirm(false)}
+                                    className="flex-1 h-12 rounded-2xl border-2 border-stone-200 text-sm font-bold text-stone-600 hover:bg-stone-50 transition-colors"
+                                >
+                                    {localizeUi(student?.language, 'Назад', 'Артка')}
+                                </button>
+                                <button
+                                    onClick={handleStartTest}
+                                    className="flex-1 h-12 rounded-2xl bg-black text-sm font-bold text-white hover:opacity-90 transition-all"
+                                >
+                                    {localizeUi(student?.language, 'Продолжить', 'Улантуу')}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
