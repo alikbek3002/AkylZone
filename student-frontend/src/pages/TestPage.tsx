@@ -37,6 +37,7 @@ export default function TestPage() {
   const [apiError, setApiError] = useState<string | null>(null);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [bypassedFullscreen, setBypassedFullscreen] = useState(false);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
@@ -223,6 +224,11 @@ export default function TestPage() {
     };
   }, [isTrial, exitFullscreen]);
 
+  // Reset bypass if we somehow get into fullscreen later
+  useEffect(() => {
+    if (isFullscreen) setBypassedFullscreen(false);
+  }, [isFullscreen]);
+
   if (!student || !token) {
     return <Navigate to="/login" replace />;
   }
@@ -354,6 +360,44 @@ export default function TestPage() {
           >
             {localizeUi(student?.language, 'На главную', 'Башкы бетке')}
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ——— Trial Fullscreen Prompt ———
+  if (isTrial && !isFullscreen && !screenshotModal && !bypassedFullscreen) {
+    return (
+      <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="mx-4 max-w-md rounded-3xl bg-white p-8 text-center shadow-2xl">
+          <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-sky-100 text-sky-600">
+            <Maximize className="h-7 w-7" />
+          </div>
+          <h3 className="mt-4 text-xl font-bold text-slate-900">
+            {localizeUi(student?.language, 'Полноэкранный режим', 'Толук экран режими')}
+          </h3>
+          <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+            {localizeUi(
+              student?.language,
+              'Для прохождения теста необходимо включить полноэкранный режим.',
+              'Тесттен өтүү үчүн толук экран режимин иштетүү зарыл.',
+            )}
+          </p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={enterFullscreen}
+              className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-sky-600 px-6 text-sm font-medium text-white hover:bg-sky-700 transition-colors"
+            >
+              <Maximize className="h-4 w-4" />
+              {localizeUi(student?.language, 'Войти в полноэкранный режим', 'Толук экран режимине кирүү')}
+            </button>
+            <button
+              onClick={() => setBypassedFullscreen(true)}
+              className="text-xs text-slate-400 hover:text-slate-600 transition-colors underline"
+            >
+              {localizeUi(student?.language, 'Продолжить без полного экрана', 'Толук экрансыз улантуу')}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -512,34 +556,6 @@ export default function TestPage() {
         </defs>
         <rect x="0" y="0" width="100%" height="100%" fill="url(#watermark-pattern)" />
       </svg>
-
-      {/* TRIAL: Fullscreen prompt */}
-      {isTrial && !isFullscreen && !screenshotModal && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="mx-4 max-w-md rounded-3xl bg-white p-8 text-center shadow-2xl">
-            <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-sky-100 text-sky-600">
-              <Maximize className="h-7 w-7" />
-            </div>
-            <h3 className="mt-4 text-xl font-bold text-slate-900">
-              {localizeUi(student?.language, 'Полноэкранный режим', 'Толук экран режими')}
-            </h3>
-            <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-              {localizeUi(
-                student?.language,
-                'Для прохождения теста необходимо включить полноэкранный режим.',
-                'Тесттен өтүү үчүн толук экран режимин иштетүү зарыл.',
-              )}
-            </p>
-            <button
-              onClick={enterFullscreen}
-              className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-sky-600 px-6 text-sm font-medium text-white hover:bg-sky-700 transition-colors"
-            >
-              <Maximize className="h-4 w-4" />
-              {localizeUi(student?.language, 'Войти в полноэкранный режим', 'Толук экран режимине кирүү')}
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="mx-auto max-w-3xl px-3 sm:px-4 py-3 sm:py-8">
         {/* Top bar */}

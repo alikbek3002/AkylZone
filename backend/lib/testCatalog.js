@@ -36,14 +36,14 @@ function getTrialStructure(studentGrade) {
           {
             id: 'mathlogic',
             isCombo: true,
-            total: 35,
+            total: 40,
             parts: [
               { id: 'math', table: 'mathlogic', questionType: 'math', prev: 0, curr: 25 },
-              { id: 'logic', table: 'mathlogic', questionType: 'logic', prev: 0, curr: 10 }
+              { id: 'logic', table: 'mathlogic', questionType: 'logic', prev: 0, curr: 15 }
             ]
           },
           { id: 'kyrgyz', total: 15, prev: 7, curr: 8 },
-          { id: 'russian', total: 15, prev: 7, curr: 8 },
+          { id: 'russian', total: 10, prev: 5, curr: 5 },
           { id: 'history', total: 10, prev: 5, curr: 5 },
         ],
       },
@@ -80,14 +80,14 @@ function getTrialStructure(studentGrade) {
         {
           id: 'mathlogic',
           isCombo: true,
-          total: 35,
+          total: 40,
           parts: [
             { id: 'math', table: 'mathlogic', questionType: 'math', prev: 12, curr: 13 },
-            { id: 'logic', table: 'mathlogic', questionType: 'logic', prev: 5, curr: 5 }
+            { id: 'logic', table: 'mathlogic', questionType: 'logic', prev: 7, curr: 8 }
           ]
         },
         { id: 'kyrgyz', total: 15, prev: 7, curr: 8 },
-        { id: 'russian', total: 15, prev: 7, curr: 8 },
+        { id: 'russian', total: 10, prev: 5, curr: 5 },
         { id: 'history', total: 10, prev: 5, curr: 5 },
       ],
     },
