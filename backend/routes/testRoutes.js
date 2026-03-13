@@ -143,9 +143,14 @@ async function fetchRandomQuestionsStrict({ subject, language, grade, requiredCo
   const actualTable = subjectTable || subject;
   const tableName = buildQuestionTableName(actualTable, language, grade);
 
+  let selectFields = 'id, question_text, options, topic, explanation, image_url';
+  if (actualTable === 'mathlogic') {
+    selectFields += ', question_type';
+  }
+
   let query = supabase
     .from(tableName)
-    .select('id, question_text, options, topic, explanation, image_url, question_type');
+    .select(selectFields);
 
   // Filter by question_type if this is a mathlogic table
   if (questionType) {
@@ -592,8 +597,8 @@ router.post('/generate', async (req, res) => {
       );
     }
 
-    console.error('Test generation error:', error);
-    return res.status(500).json({ error: 'Internal server error during test generation' });
+    console.error('Test generation error details:', error.message, error.stack);
+    return res.status(500).json({ error: 'Internal server error during test generation', details: error.message });
   }
 });
 
