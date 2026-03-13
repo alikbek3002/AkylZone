@@ -457,8 +457,8 @@ export default function TestsPage() {
                       type="button"
                       onClick={() => setFormData((p) => ({ ...p, questionType: 'math' }))}
                       className={`flex-1 rounded-xl border-2 px-4 py-2.5 text-sm font-medium transition-all ${formData.questionType === 'math'
-                          ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-700'
-                          : 'border-border bg-card hover:border-blue-300'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-700'
+                        : 'border-border bg-card hover:border-blue-300'
                         }`}
                     >
                       Математика
@@ -467,8 +467,8 @@ export default function TestsPage() {
                       type="button"
                       onClick={() => setFormData((p) => ({ ...p, questionType: 'logic' }))}
                       className={`flex-1 rounded-xl border-2 px-4 py-2.5 text-sm font-medium transition-all ${formData.questionType === 'logic'
-                          ? 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-700'
-                          : 'border-border bg-card hover:border-purple-300'
+                        ? 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-700'
+                        : 'border-border bg-card hover:border-purple-300'
                         }`}
                     >
                       Логика
@@ -535,46 +535,62 @@ export default function TestsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {(['A', 'B', 'C', 'D'] as const).map((letter) => {
-                  const key = `option${letter}` as keyof typeof formData;
-                  const isCorrect = formData.correctOption === letter;
-                  return (
-                    <div key={letter} className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <Label>Вариант {letter}</Label>
-                        <div className="flex items-center gap-2">
-                          <MathToolbar
-                            onInsert={(t) => handleInsertMath(t, key)}
-                            onOpenVisualEditor={() => openVisualMathEditor(key)}
-                          />
+              <div className="space-y-2">
+                <Label>Варианты ответов</Label>
+                <div className="space-y-3">
+                  {(['A', 'B', 'C', 'D'] as const).map((letter) => {
+                    const key = `option${letter}` as keyof typeof formData;
+                    const isCorrect = formData.correctOption === letter;
+                    return (
+                      <div
+                        key={letter}
+                        className={`rounded-xl border-2 p-3 transition-all ${isCorrect
+                            ? 'border-green-300 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30'
+                            : 'border-border bg-card'
+                          }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-bold text-muted-foreground">
+                            {letter}
+                          </span>
                           <button
                             type="button"
                             onClick={() => setFormData((p) => ({ ...p, correctOption: letter }))}
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${isCorrect
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-all ${isCorrect
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                : 'bg-muted text-muted-foreground hover:bg-muted/80 cursor-pointer'
                               }`}
                           >
-                            {isCorrect ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                            {isCorrect ? 'Правильный' : 'Неправильный'}
+                            {isCorrect ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                            {isCorrect ? 'Правильный' : 'Отметить правильным'}
                           </button>
                         </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Input
-                          required
-                          value={formData[key]}
-                          onChange={(e) => setFormData((p) => ({ ...p, [key]: e.target.value }))}
-                          className="flex-1"
-                        />
-                        <div className="flex items-center justify-center min-w-[100px] max-w-[150px] rounded-md border bg-muted/30 px-2 py-1 text-sm overflow-hidden">
-                          <MarkdownRenderer content={formData[key] || '*пусто*'} />
+                        <div className="flex gap-2 items-center">
+                          <Input
+                            required
+                            value={formData[key]}
+                            onChange={(e) => setFormData((p) => ({ ...p, [key]: e.target.value }))}
+                            className="flex-1"
+                            placeholder={`Вариант ${letter}`}
+                          />
+                          {formData[key] && (
+                            <div className="flex items-center justify-center min-w-[80px] max-w-[140px] rounded-lg border bg-muted/30 px-2.5 py-1.5 text-sm overflow-hidden">
+                              <MarkdownRenderer content={formData[key]} />
+                            </div>
+                          )}
                         </div>
+                        {subject === 'mathlogic' && (
+                          <div className="mt-2">
+                            <MathToolbar
+                              onInsert={(t) => handleInsertMath(t, key)}
+                              onOpenVisualEditor={() => openVisualMathEditor(key)}
+                            />
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="space-y-2">
