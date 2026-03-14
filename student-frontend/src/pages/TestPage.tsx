@@ -718,11 +718,9 @@ export default function TestPage() {
                   </div>
                 )}
                 <span className={`text-sm font-bold ${currentReveal.is_correct ? 'text-emerald-700' : 'text-rose-700'}`}>
-                  {currentReveal.is_correct
-                    ? localizeUi(student?.language, 'Правильно', 'Туура')
-                    : localizeUi(student?.language, 'Неправильно', 'Туура эмес')}
-                  {' — '}
-                  {String.fromCharCode(65 + currentReveal.correct_index)}
+                  {student?.language === 'kg'
+                    ? (currentReveal.is_correct ? 'Азаматсын, туура жообу - ' : 'Жанылышасын, туура жообу - ') + String.fromCharCode(65 + currentReveal.correct_index)
+                    : (currentReveal.is_correct ? 'Правильно' : 'Неправильно') + ' — ' + String.fromCharCode(65 + currentReveal.correct_index)}
                 </span>
               </div>
 
