@@ -587,14 +587,11 @@ export default function TestPage() {
           </div>
         </div>
 
-        {/* Question counter + type */}
+        {/* Question counter */}
         <div className="flex items-center justify-between mb-2 sm:mb-4">
           <h1 className="text-lg sm:text-3xl font-black text-black">
             {currentQuestionIndex + 1}<span className="text-stone-300">/{totalQuestions}</span>
           </h1>
-          <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-stone-400">
-            {isTrial ? localizeUi(student?.language, 'Сынамык', 'Сынамык') : (testData.test_info.subject || '')}
-          </span>
         </div>
 
         {/* Progress bar */}
@@ -626,31 +623,9 @@ export default function TestPage() {
           )}
 
           <div className="border-b border-stone-100 px-3.5 py-3 sm:px-6 sm:py-6">
-            <div className="flex flex-col gap-2">
-              {(currentQuestion?.question_type || currentQuestion?.topic) && (
-                <div className="flex flex-wrap items-center gap-2 mb-1">
-                  {currentQuestion?.question_type && (
-                    <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-semibold ${currentQuestion.question_type === 'math'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-purple-100 text-purple-700'
-                      }`}>
-                      {localizeUi(student?.language,
-                        currentQuestion.question_type === 'math' ? 'Математика' : 'Логика',
-                        currentQuestion.question_type === 'math' ? 'Математика' : 'Логика'
-                      )}
-                    </span>
-                  )}
-                  {currentQuestion?.topic && (
-                    <span className="inline-block rounded-md bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-600">
-                      {currentQuestion.topic}
-                    </span>
-                  )}
-                </div>
-              )}
-              <h2 className="text-base sm:text-xl font-medium leading-relaxed text-black">
-                <MarkdownRenderer content={currentQuestion?.text || ''} />
-              </h2>
-            </div>
+            <h2 className="text-base sm:text-xl font-medium leading-relaxed text-black">
+              <MarkdownRenderer content={currentQuestion?.text || ''} />
+            </h2>
           </div>
 
           <div className="px-3.5 py-3.5 sm:px-6 sm:py-6">
@@ -719,7 +694,7 @@ export default function TestPage() {
                 )}
                 <span className={`text-sm font-bold ${currentReveal.is_correct ? 'text-emerald-700' : 'text-rose-700'}`}>
                   {student?.language === 'kg'
-                    ? (currentReveal.is_correct ? 'Азаматсын, туура жообу - ' : 'Жанылышасын, туура жообу - ') + String.fromCharCode(65 + currentReveal.correct_index)
+                    ? (currentReveal.is_correct ? 'Азаматсың, туура жообу - ' : 'Жаңылышасың, туура жообу - ') + String.fromCharCode(65 + currentReveal.correct_index)
                     : (currentReveal.is_correct ? 'Правильно' : 'Неправильно') + ' — ' + String.fromCharCode(65 + currentReveal.correct_index)}
                 </span>
               </div>
