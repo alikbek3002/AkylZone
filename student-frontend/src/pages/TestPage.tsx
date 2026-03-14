@@ -17,6 +17,16 @@ function localizeUi(language: 'ru' | 'kg' | undefined, ruText: string, kgText: s
   return language === 'kg' ? kgText : ruText;
 }
 
+const SUBJECT_NAMES: Record<string, { ru: string; kg: string }> = {
+  math: { ru: 'Математика', kg: 'Математика' },
+  logic: { ru: 'Логика', kg: 'Логика' },
+  history: { ru: 'История', kg: 'Тарых' },
+  english: { ru: 'Английский язык', kg: 'Англис тили' },
+  russian: { ru: 'Русский язык', kg: 'Орус тили' },
+  kyrgyz: { ru: 'Кыргызский язык', kg: 'Кыргыз тили' },
+  mathlogic: { ru: 'Математика и Логика', kg: 'Математика жана Логика' },
+};
+
 type RevealState = Record<string, AnswerQuestionResponse>;
 
 export default function TestPage() {
@@ -587,11 +597,21 @@ export default function TestPage() {
           </div>
         </div>
 
-        {/* Question counter */}
+        {/* Question counter + subject */}
         <div className="flex items-center justify-between mb-2 sm:mb-4">
           <h1 className="text-lg sm:text-3xl font-black text-black">
             {currentQuestionIndex + 1}<span className="text-stone-300">/{totalQuestions}</span>
           </h1>
+          {(() => {
+            const subjId = isTrial ? currentQuestion?.question_type : (testData.test_info.subject || '');
+            const meta = subjId ? SUBJECT_NAMES[subjId] : null;
+            if (!meta) return null;
+            return (
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-stone-500">
+                {localizeUi(student?.language, meta.ru, meta.kg)}
+              </span>
+            );
+          })()}
         </div>
 
         {/* Progress bar */}
