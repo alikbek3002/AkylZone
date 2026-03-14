@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -6,6 +6,7 @@ import TestPage from './pages/TestPage';
 import MainTestSelectionPage from './pages/MainTestSelectionPage';
 import TrialTestSelectionPage from './pages/TrialTestSelectionPage';
 import { useAuthStore } from './store/authStore';
+import { setOnUnauthorized } from './lib/api';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const token = useAuthStore((state) => state.token);
@@ -17,6 +18,14 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   const token = useAuthStore((state) => state.token);
+  const logout = useAuthStore((state) => state.logout);
+
+  useEffect(() => {
+    setOnUnauthorized(() => {
+      logout();
+      window.location.replace('/login');
+    });
+  }, [logout]);
 
   return (
     <BrowserRouter>

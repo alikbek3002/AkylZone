@@ -1,5 +1,10 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
+let onUnauthorized: (() => void) | null = null;
+export function setOnUnauthorized(cb: () => void) {
+  onUnauthorized = cb;
+}
+
 interface ApiErrorPayload {
   error?: string;
 }
@@ -163,8 +168,11 @@ async function request<T>(
 
   if (!response.ok) {
     const errorMessage =
-      (data && typeof data === 'object' && 'error' in data && data.error) ||
+      (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string' ? data.error : null) ||
       `Request failed with status ${response.status}`;
+    if (response.status === 401 || (typeof errorMessage === 'string' && /invalid|expired|token/i.test(errorMessage))) {
+      onUnauthorized?.();
+    }
     throw new Error(errorMessage);
   }
 
